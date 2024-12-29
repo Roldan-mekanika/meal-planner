@@ -88,7 +88,7 @@ const CreateRecipe = () => {
     }));
   };
 
-  const handleCreateNewIngredient = async () => {
+  const handleCreateNewIngredient = async (context = { type: 'base' }) => {
     try {
       const exists = availableIngredients.some(
         ing => ing.name.toLowerCase() === newIngredientData.name.toLowerCase()
@@ -106,22 +106,43 @@ const CreateRecipe = () => {
       };
       
       setAvailableIngredients(prev => [...prev, newIngredient]);
-      
-      const currentIndex = recipe.base_ingredients.length - 1;
-      setRecipe(prev => {
-        const newIngredients = [...prev.base_ingredients];
-        newIngredients[currentIndex] = {
-          ...newIngredients[currentIndex],
-          ingredient_id: docRef.id,
-          unit: newIngredientData.unit
-        };
-        return { ...prev, base_ingredients: newIngredients };
-      });
-      
-      setSearchTerms(prev => ({
-        ...prev,
-        [currentIndex]: newIngredientData.name
-      }));
+
+      if (context.type === 'variant') {
+        // Si nous sommes dans une variante
+        setRecipe(prev => {
+          const newVariants = [...prev.variants];
+          newVariants[context.variantIndex].ingredients.push({
+            ingredient_id: docRef.id,
+            quantity: '',
+            unit: newIngredientData.unit
+          });
+          return { ...prev, variants: newVariants };
+        });
+        
+        const newIngredientIndex = recipe.variants[context.variantIndex].ingredients.length;
+        setSearchTerms(prev => ({
+          ...prev,
+          [`${context.variantIndex}-${newIngredientIndex}`]: newIngredientData.name
+        }));
+      } else {
+        // Si nous sommes dans les ingrédients de base
+        setRecipe(prev => ({
+          ...prev,
+          base_ingredients: [
+            ...prev.base_ingredients,
+            {
+              ingredient_id: docRef.id,
+              quantity: '',
+              unit: newIngredientData.unit
+            }
+          ]
+        }));
+        
+        setSearchTerms(prev => ({
+          ...prev,
+          [recipe.base_ingredients.length]: newIngredientData.name
+        }));
+      }
       
       setIsAddingNewIngredient(false);
       setNewIngredientData({ name: '', category: 'legumes', unit: 'g' });
@@ -150,10 +171,13 @@ const CreateRecipe = () => {
     setRecipe(prev => ({
       ...prev,
       variants: [
-        ...prev.variants, 
+        ...prev.variants,
         {
           name: '',
-          ingredients: [...prev.base_ingredients],
+          // Copie profonde des ingrédients de base
+          ingredients: prev.base_ingredients.map(ingredient => ({
+            ...ingredient
+          })),
           instructions: prev.instructions,
           preparation_time: prev.preparation_time,
           cooking_time: prev.cooking_time
@@ -408,17 +432,17 @@ const CreateRecipe = () => {
                       ing.name.toLowerCase() === searchTerms[index].toLowerCase()
                     ) && (
                       <button
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          setIsAddingNewIngredient(true);
-                          setNewIngredientData({ ...newIngredientData, name: searchTerms[index] });
-                          setEditingIngredientIndex(null);
-                        }}
-                        className="w-full text-left px-4 py-2 text-green-600 hover:bg-gray-100 border-t"
-                      >
-                        + Créer "{searchTerms[index]}"
-                      </button>
+  type="button"
+  onMouseDown={(e) => {
+    e.preventDefault();
+    setIsAddingNewIngredient(true);
+    setNewIngredientData({ ...newIngredientData, name: searchTerms[index] });
+    setEditingIngredientIndex(index.toString());
+  }}
+  className="w-full text-left px-4 py-2 text-green-600 hover:bg-gray-100 border-t"
+>
+  + Créer "{searchTerms[index]}"
+</button>
                     )}
                   </div>
                 )}
@@ -596,68 +620,89 @@ const CreateRecipe = () => {
               <div className="mt-4">
                 <h3 className="text-md font-medium text-gray-700 mb-2">Ingrédients spécifiques</h3>
                 {variant.ingredients.map((ingredient, ingredientIndex) => (
-                  <div key={ingredientIndex} className="grid grid-cols-3 gap-4 mb-4">
-                    <div className="relative">
-                      <input 
-                        type="text"
-                        value={ingredient.ingredient_id 
-                          ? availableIngredients.find(ing => ing.id === ingredient.ingredient_id)?.name || ''
-                          : searchTerms[`${variantIndex}-${ingredientIndex}`] || ''}
-                        onChange={(e) => {
-                          setSearchTerms({ ...searchTerms, [`${variantIndex}-${ingredientIndex}`]: e.target.value });
-                          if (!e.target.value) {
-                            const newVariants = [...recipe.variants];
-                            newVariants[variantIndex].ingredients[ingredientIndex] = { 
-                              ...newVariants[variantIndex].ingredients[ingredientIndex], 
-                              ingredient_id: '' 
-                            };
-                            setRecipe(prev => ({ ...prev, variants: newVariants }));
-                          }
-                        }}
-                        onFocus={() => setEditingIngredientIndex(`${variantIndex}-${ingredientIndex}`)}
-                        onBlur={() => {
-                          setTimeout(() => {
-                            setEditingIngredientIndex(null);
-                          }, 200);
-                        }}
-                        placeholder="Rechercher un ingrédient..."
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
-                      />
-                      {editingIngredientIndex === `${variantIndex}-${ingredientIndex}` && 
-                       searchTerms[`${variantIndex}-${ingredientIndex}`] && 
-                       searchTerms[`${variantIndex}-${ingredientIndex}`].length >= 2 && (
-                        <div className="absolute z-10 w-full mt-1 bg-white shadow-lg rounded-md border border-gray-200 max-h-60 overflow-auto">
-                          {availableIngredients
-                            .filter(ing => ing.name.toLowerCase().includes(
-                              searchTerms[`${variantIndex}-${ingredientIndex}`].toLowerCase()
-                            ))
-                            .map(ing => (
-                              <button
-                                key={ing.id}
-                                type="button"
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  const newVariants = [...recipe.variants];
-                                  newVariants[variantIndex].ingredients[ingredientIndex] = {
-                                    ...newVariants[variantIndex].ingredients[ingredientIndex],
-                                    ingredient_id: ing.id,
-                                    unit: ing.unit
-                                  };
-                                  setRecipe(prev => ({ ...prev, variants: newVariants }));
-                                  setSearchTerms({ 
-                                    ...searchTerms, 
-                                    [`${variantIndex}-${ingredientIndex}`]: ing.name 
-                                  });
-                                  setEditingIngredientIndex(null);
-                                }}
-                                className="w-full text-left px-4 py-2 hover:bg-gray-100"
-                              >
-                                {ing.name}
-                              </button>
-                            ))}
-                        </div>
-                      )}
-                    </div>
+  <div key={`${variantIndex}-${ingredientIndex}`} className="grid grid-cols-3 gap-4 mb-4">
+    <div className="relative">
+      <input 
+        type="text"
+        value={ingredient.ingredient_id 
+          ? availableIngredients.find(ing => ing.id === ingredient.ingredient_id)?.name || ''
+          : searchTerms[`${variantIndex}-${ingredientIndex}`] || ''}
+        onChange={(e) => {
+          setSearchTerms({ 
+            ...searchTerms, 
+            [`${variantIndex}-${ingredientIndex}`]: e.target.value 
+          });
+          if (!e.target.value) {
+            const newVariants = [...recipe.variants];
+            newVariants[variantIndex].ingredients[ingredientIndex] = {
+              ...newVariants[variantIndex].ingredients[ingredientIndex],
+              ingredient_id: ''
+            };
+            setRecipe(prev => ({ ...prev, variants: newVariants }));
+          }
+        }}
+        onFocus={() => setEditingIngredientIndex(`${variantIndex}-${ingredientIndex}`)}
+        onBlur={() => {
+          setTimeout(() => {
+            setEditingIngredientIndex(null);
+          }, 200);
+        }}
+        placeholder="Rechercher un ingrédient..."
+        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+      />
+      {editingIngredientIndex === `${variantIndex}-${ingredientIndex}` && 
+       searchTerms[`${variantIndex}-${ingredientIndex}`] && 
+       searchTerms[`${variantIndex}-${ingredientIndex}`].length >= 2 && (
+        <div className="absolute z-10 w-full mt-1 bg-white shadow-lg rounded-md border border-gray-200 max-h-60 overflow-auto">
+          {availableIngredients
+            .filter(ing => ing.name.toLowerCase().includes(
+              searchTerms[`${variantIndex}-${ingredientIndex}`].toLowerCase()
+            ))
+            .map(ing => (
+              <button
+                key={ing.id}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const newVariants = [...recipe.variants];
+                  newVariants[variantIndex].ingredients[ingredientIndex] = {
+                    ...newVariants[variantIndex].ingredients[ingredientIndex],
+                    ingredient_id: ing.id,
+                    unit: ing.unit
+                  };
+                  setRecipe(prev => ({ ...prev, variants: newVariants }));
+                  setSearchTerms(prev => ({
+                    ...prev,
+                    [`${variantIndex}-${ingredientIndex}`]: ing.name
+                  }));
+                }}
+                className="w-full text-left px-4 py-2 hover:bg-gray-100"
+              >
+                {ing.name}
+              </button>
+            ))}
+          {!availableIngredients.some(ing => 
+            ing.name.toLowerCase() === searchTerms[`${variantIndex}-${ingredientIndex}`].toLowerCase()
+          ) && (
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setIsAddingNewIngredient(true);
+                setNewIngredientData({ 
+                  ...newIngredientData, 
+                  name: searchTerms[`${variantIndex}-${ingredientIndex}`] 
+                });
+                setEditingIngredientIndex(`${variantIndex}-${ingredientIndex}`);
+              }}
+              className="w-full text-left px-4 py-2 text-green-600 hover:bg-gray-100 border-t"
+            >
+              + Créer "{searchTerms[`${variantIndex}-${ingredientIndex}`]}"
+            </button>
+          )}
+        </div>
+      )}
+    </div>
 
                     <div className="relative flex-1">
                       <input
@@ -799,12 +844,16 @@ const CreateRecipe = () => {
                     Annuler
                   </button>
                   <button
-                    type="button"
-                    onClick={handleCreateNewIngredient}
-                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                  >
-                    Créer
-                  </button>
+  type="button"
+  onClick={() => handleCreateNewIngredient({ 
+    type: editingIngredientIndex?.includes('-') ? 'variant' : 'base',
+    variantIndex: editingIngredientIndex?.includes('-') ? 
+      parseInt(editingIngredientIndex.split('-')[0]) : null
+  })}
+  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+>
+  Créer
+</button>
                 </div>
               </div>
             </div>
