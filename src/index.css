@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.prose {
+  @apply text-gray-700;
+}
+
+.prose h1 {
+  @apply text-2xl font-bold text-gray-900 mt-6 mb-4;
+}
+
+.prose h2 {
+  @apply text-xl font-bold text-gray-900 mt-5 mb-3;
+}
+
+.prose p {
+  @apply mb-4;
+}
+
+.prose ul {
+  @apply list-disc list-inside mb-4;
+}
+
+.prose ol {
+  @apply list-decimal list-inside mb-4;
+}
+
+.prose li {
+  @apply mb-2;
+}
+
+.prose a.recipe-link {
+  @apply text-green-600 hover:text-green-800;
+  text-decoration: none;
+}
+
+.prose a.recipe-link:hover {
+  text-decoration: underline;
+}
+
+/* Styles pour React Quill */
+.ql-container {
+  @apply min-h-[200px] !important;
+}
+
+.ql-editor {
+  @apply min-h-[200px] !important;
+}
+
+#toolbar {
+  @apply flex flex-wrap gap-2 p-2 border border-gray-300 rounded-t-md;
+}
+
+#toolbar button, #toolbar select {
+  @apply p-1 rounded hover:bg-gray-100;
+}
+
+.recipe-link {
+  @apply px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200;
+}
