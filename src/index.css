@@ -1,61 +1,51 @@
+/* src/index.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-.prose {
-  @apply text-gray-700;
+@layer base {
+  body {
+    @apply bg-sage-50 text-sage-900;
+  }
 }
 
-.prose h1 {
-  @apply text-2xl font-bold text-gray-900 mt-6 mb-4;
-}
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-earth-600 text-white rounded-lg hover:bg-earth-700 
+    transition-colors duration-200 focus:outline-none focus:ring-2 
+    focus:ring-earth-500 focus:ring-offset-2;
+  }
 
-.prose h2 {
-  @apply text-xl font-bold text-gray-900 mt-5 mb-3;
-}
+  .btn-secondary {
+    @apply px-4 py-2 bg-white text-sage-700 border border-sage-300 
+    rounded-lg hover:bg-sage-50 transition-colors duration-200 
+    focus:outline-none focus:ring-2 focus:ring-sage-500 focus:ring-offset-2;
+  }
 
-.prose p {
-  @apply mb-4;
-}
+  .input-primary {
+    @apply w-full rounded-lg border-sage-300 shadow-soft 
+    placeholder-sage-400 focus:border-earth-500 focus:ring-earth-500 
+    transition-shadow duration-200;
+  }
 
-.prose ul {
-  @apply list-disc list-inside mb-4;
-}
+  .card {
+    @apply bg-white rounded-lg shadow-soft hover:shadow-hover 
+    transition-all duration-200;
+  }
 
-.prose ol {
-  @apply list-decimal list-inside mb-4;
-}
+  .prose {
+    @apply text-sage-700;
+  }
 
-.prose li {
-  @apply mb-2;
-}
+  .prose h1 {
+    @apply text-2xl font-bold text-sage-900 mt-6 mb-4;
+  }
 
-.prose a.recipe-link {
-  @apply text-green-600 hover:text-green-800;
-  text-decoration: none;
-}
+  .prose h2 {
+    @apply text-xl font-bold text-sage-900 mt-5 mb-3;
+  }
 
-.prose a.recipe-link:hover {
-  text-decoration: underline;
-}
-
-/* Styles pour React Quill */
-.ql-container {
-  @apply min-h-[200px] !important;
-}
-
-.ql-editor {
-  @apply min-h-[200px] !important;
-}
-
-#toolbar {
-  @apply flex flex-wrap gap-2 p-2 border border-gray-300 rounded-t-md;
-}
-
-#toolbar button, #toolbar select {
-  @apply p-1 rounded hover:bg-gray-100;
-}
-
-.recipe-link {
-  @apply px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200;
+  .prose a {
+    @apply text-earth-600 hover:text-earth-700;
+  }
 }
