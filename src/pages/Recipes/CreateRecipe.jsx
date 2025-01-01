@@ -2,10 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, addDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, uploadBytes, getDownloadURL, connectStorageEmulator } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
 import { tagCategories, ingredientCategories } from '../../config/categories';
 import RecipeEditor from '../../components/common/RecipeEditor/index.jsx';
+import IngredientInput from '../../components/common/IngredientInput/index.jsx';
+import RecipeIngredientForm from '../../components/recipes/RecipeIngredientForm';
+import { processImage, validateRecipe, formatErrorMessage } from '../../utils/imageProcessor';
 
 const CreateRecipe = () => {
   const navigate = useNavigate();
@@ -23,6 +26,7 @@ const CreateRecipe = () => {
     category: 'legumes',
     unit: 'g'
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [recipe, setRecipe] = useState({
     title: '',
@@ -73,10 +77,16 @@ const CreateRecipe = () => {
     }
   };
 
-  const handleImageChange = (e) => {
-    if (e.target.files[0]) {
-      setImage(e.target.files[0]);
-      setImagePreview(URL.createObjectURL(e.target.files[0]));
+  const handleImageChange = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      try {
+        const processedImage = await processImage(file);
+        setImage(processedImage);
+        setImagePreview(URL.createObjectURL(processedImage));
+      } catch (error) {
+        alert("Erreur lors du traitement de l'image : " + error.message);
+      }
     }
   };
 
@@ -201,29 +211,42 @@ const CreateRecipe = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
+  
     try {
-      let imageUrl = '';
+      let imageUrl = recipe.image_url || ''; // Pour EditRecipe
       if (image) {
-        const storageRef = ref(storage, `recipe-images/${image.name}`);
-        await uploadBytes(storageRef, image);
-        imageUrl = await getDownloadURL(storageRef);
+        try {
+          const storageRef = ref(storage, `recipe-images/${Date.now()}-${image.name}`);
+          await uploadBytes(storageRef, image);
+          imageUrl = await getDownloadURL(storageRef);
+        } catch (error) {
+          console.error("Erreur upload image:", error);
+          throw new Error("Erreur lors de l'upload de l'image");
+        }
       }
-
+  
       const recipeData = {
         ...recipe,
         image_url: imageUrl,
         preparation_time: parseInt(recipe.preparation_time),
         cooking_time: parseInt(recipe.cooking_time),
         variants: recipe.hasVariants ? recipe.variants : [],
-        created_at: new Date()
+        created_at: new Date() // ou updated_at pour EditRecipe
       };
-
+  
+      // Pour CreateRecipe :
       await addDoc(collection(db, 'recipes'), recipeData);
-      alert('Recette créée avec succès !');
+      // OU pour EditRecipe :
+      // await updateDoc(doc(db, 'recipes', id), recipeData);
+  
+      alert('Recette enregistrée avec succès !');
       navigate('/recipes');
     } catch (error) {
-      console.error("Erreur lors de la création de la recette:", error);
-      alert("Une erreur s'est produite lors de la création de la recette");
+      console.error("Erreur:", error);
+      alert("Une erreur s'est produite : " + error.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -443,151 +466,37 @@ const CreateRecipe = () => {
         )}
 
         {/* Base Ingredients Section */}
-        <div className="bg-white rounded-lg shadow-soft p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-sage-900">
-              Ingrédients de base
-            </h2>
-            <button
-              type="button"
-              onClick={handleAddIngredient}
-              className="inline-flex items-center px-4 py-2 bg-earth-600 text-white 
-                rounded-lg hover:bg-earth-700 transition-colors duration-200 group"
-            >
-              <svg className="w-5 h-5 mr-2 transition-transform duration-200 group-hover:scale-110" 
-                fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                  d="M12 4v16m8-8H4" />
-              </svg>
-              Ajouter un ingrédient
-            </button>
-          </div>
+        <div className="flex justify-between items-center mb-6">
+  <h2 className="text-xl font-semibold text-sage-900">
+    Ingrédients de base
+  </h2>
+  <button
+    type="button"
+    onClick={handleAddIngredient}
+    className="inline-flex items-center px-4 py-2 bg-earth-600 text-white 
+      rounded-lg hover:bg-earth-700 transition-colors duration-200 group"
+  >
+    <svg className="w-5 h-5 mr-2 transition-transform duration-200 group-hover:scale-110" 
+      fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+        d="M12 4v16m8-8H4" />
+    </svg>
+    Ajouter un ingrédient
+  </button>
+</div>
 
-          <div className="space-y-4">
-            {recipe.base_ingredients.map((ingredient, index) => (
-              <div key={index} className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 
-                bg-sage-50 rounded-lg group">
-                <div className="relative">
-                  <input 
-                    type="text"
-                    value={ingredient.ingredient_id 
-                      ? availableIngredients.find(ing => ing.id === ingredient.ingredient_id)?.name || ''
-                      : searchTerms[index] || ''}
-                    onChange={(e) => {
-                      setSearchTerms({ ...searchTerms, [index]: e.target.value });
-                      if (!e.target.value) {
-                        const newIngredients = [...recipe.base_ingredients];
-                        newIngredients[index] = { ...newIngredients[index], ingredient_id: '' };
-                        setRecipe(prev => ({ ...prev, base_ingredients: newIngredients }));
-                      }
-                    }}
-                    onFocus={() => setEditingIngredientIndex(index)}
-                    onBlur={() => {
-                      setTimeout(() => {
-                        setEditingIngredientIndex(null);
-                      }, 200);
-                    }}
-                    placeholder="Rechercher un ingrédient..."
-                    className="w-full rounded-lg border-sage-300 shadow-soft
-                      focus:border-earth-500 focus:ring-earth-500 transition-shadow duration-200"
-                  />
-                  {editingIngredientIndex === index && searchTerms[index] && 
-                   searchTerms[index].length >= 2 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white rounded-lg 
-                      border border-sage-200 shadow-hover max-h-60 overflow-auto">
-                      {availableIngredients
-                        .filter(ing => ing.name.toLowerCase()
-                          .includes(searchTerms[index].toLowerCase()))
-                        .map(ing => (
-                          <button
-                            key={ing.id}
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              handleIngredientSelect(index, ing.id);
-                              setSearchTerms({ ...searchTerms, [index]: ing.name });
-                            }}
-                            className="w-full text-left px-4 py-2 text-sage-700 
-                              hover:bg-sage-50 transition-colors duration-200"
-                          >
-                            {ing.name}
-                          </button>
-                        ))}
-                      {!availableIngredients.some(ing => 
-                        ing.name.toLowerCase() === searchTerms[index].toLowerCase()
-                      ) && (
-                        <button
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            setIsAddingNewIngredient(true);
-                            setNewIngredientData({ ...newIngredientData, name: searchTerms[index] });
-                          }}
-                          className="w-full text-left px-4 py-2 text-earth-600 
-                            hover:bg-sage-50 transition-colors duration-200 
-                            border-t border-sage-200"
-                        >
-                          + Créer "{searchTerms[index]}"
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <input
-                  type="number"
-                  value={ingredient.quantity}
-                  onChange={(e) => {
-                    const newIngredients = [...recipe.base_ingredients];
-                    newIngredients[index].quantity = e.target.value;
-                    setRecipe(prev => ({ ...prev, base_ingredients: newIngredients }));
-                  }}
-                  placeholder="Quantité"
-                  className="w-full rounded-lg border-sage-300 shadow-soft
-                    focus:border-earth-500 focus:ring-earth-500 transition-shadow duration-200"
-                />
-
-                <div className="flex gap-2">
-                  <select
-                    value={ingredient.unit || ''}
-                    onChange={(e) => {
-                      const newIngredients = [...recipe.base_ingredients];
-                      newIngredients[index].unit = e.target.value;
-                      setRecipe(prev => ({ ...prev, base_ingredients: newIngredients }));
-                    }}
-                    className="w-full rounded-lg border-sage-300 shadow-soft
-                      focus:border-earth-500 focus:ring-earth-500 transition-shadow duration-200"
-                  >
-                    <option value="">Sans unité</option>
-                    {units.map(unit => (
-                      <option key={unit.value} value={unit.value}>{unit.label}</option>
-                    ))}
-                  </select>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newIngredients = recipe.base_ingredients
-                        .filter((_, i) => i !== index);
-                      setRecipe(prev => ({ ...prev, base_ingredients: newIngredients }));
-                      const newSearchTerms = { ...searchTerms };
-                      delete newSearchTerms[index];
-                      setSearchTerms(newSearchTerms);
-                    }}
-                    className="p-2 text-sage-400 hover:text-red-500 
-                      transition-colors duration-200"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" 
-                      stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" 
-                        strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+<RecipeIngredientForm
+  ingredients={recipe.base_ingredients}
+  searchTerms={searchTerms}
+  setSearchTerms={setSearchTerms}
+  editingIngredientIndex={editingIngredientIndex}
+  setEditingIngredientIndex={setEditingIngredientIndex}
+  recipe={recipe}
+  setRecipe={setRecipe}
+  availableIngredients={availableIngredients}
+  setAvailableIngredients={setAvailableIngredients}
+  units={units}
+/>
         {/* Base Instructions Section */}
         <div className="bg-white rounded-lg shadow-soft p-6">
           <h2 className="text-xl font-semibold text-sage-900 mb-6">
@@ -715,188 +624,48 @@ const CreateRecipe = () => {
 
               {/* Variant Ingredients */}
               <div className="mb-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium text-sage-700">
-                    Ingrédients spécifiques
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newVariants = [...recipe.variants];
-                      newVariants[variantIndex].ingredients.push({
-                        ingredient_id: '',
-                        quantity: '',
-                        unit: ''
-                      });
-                      setRecipe(prev => ({ ...prev, variants: newVariants }));
-                    }}
-                    className="inline-flex items-center text-earth-600 hover:text-earth-700 
-                      transition-colors duration-200"
-                  >
-                    <svg className="w-5 h-5 mr-1" fill="none" viewBox="0 0 24 24" 
-                      stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" 
-                        strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Ajouter un ingrédient
-                  </button>
-                </div>
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="text-lg font-medium text-sage-700">
+      Ingrédients spécifiques
+    </h3>
+    <button
+      type="button"
+      onClick={() => {
+        const newVariants = [...recipe.variants];
+        newVariants[variantIndex].ingredients.push({
+          ingredient_id: '',
+          quantity: '',
+          unit: ''
+        });
+        setRecipe(prev => ({ ...prev, variants: newVariants }));
+      }}
+      className="inline-flex items-center px-4 py-2 bg-earth-600 text-white 
+        rounded-lg hover:bg-earth-700 transition-colors duration-200 group"
+    >
+      <svg className="w-5 h-5 mr-2 transition-transform duration-200 group-hover:scale-110" 
+        fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+          d="M12 4v16m8-8H4" />
+      </svg>
+      Ajouter un ingrédient
+    </button>
+  </div>
 
-                <div className="space-y-4">
-                  {variant.ingredients.map((ingredient, ingredientIndex) => (
-                    <div key={`${variantIndex}-${ingredientIndex}`} 
-                      className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 
-                      bg-sage-50 rounded-lg">
-                      <div className="relative">
-                        <input 
-                          type="text"
-                          value={ingredient.ingredient_id 
-                            ? availableIngredients.find(ing => ing.id === ingredient.ingredient_id)?.name || ''
-                            : searchTerms[`${variantIndex}-${ingredientIndex}`] || ''}
-                          onChange={(e) => {
-                            setSearchTerms({ 
-                              ...searchTerms, 
-                              [`${variantIndex}-${ingredientIndex}`]: e.target.value 
-                            });
-                            if (!e.target.value) {
-                              const newVariants = [...recipe.variants];
-                              newVariants[variantIndex].ingredients[ingredientIndex] = {
-                                ...newVariants[variantIndex].ingredients[ingredientIndex],
-                                ingredient_id: ''
-                              };
-                              setRecipe(prev => ({ ...prev, variants: newVariants }));
-                            }
-                          }}
-                          onFocus={() => setEditingIngredientIndex(`${variantIndex}-${ingredientIndex}`)}
-                          onBlur={() => {
-                            setTimeout(() => {
-                              setEditingIngredientIndex(null);
-                            }, 200);
-                          }}
-                          placeholder="Rechercher un ingrédient..."
-                          className="w-full rounded-lg border-sage-300 shadow-soft
-                            focus:border-earth-500 focus:ring-earth-500 transition-shadow duration-200"
-                        />
-
-                        {editingIngredientIndex === `${variantIndex}-${ingredientIndex}` && 
-                         searchTerms[`${variantIndex}-${ingredientIndex}`] && 
-                         searchTerms[`${variantIndex}-${ingredientIndex}`].length >= 2 && (
-                          <div className="absolute z-10 w-full mt-1 bg-white rounded-lg 
-                            border border-sage-200 shadow-hover max-h-60 overflow-auto">
-                            {availableIngredients
-                              .filter(ing => ing.name.toLowerCase()
-                                .includes(searchTerms[`${variantIndex}-${ingredientIndex}`]
-                                  .toLowerCase()))
-                              .map(ing => (
-                                <button
-                                  key={ing.id}
-                                  type="button"
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    const newVariants = [...recipe.variants];
-                                    newVariants[variantIndex].ingredients[ingredientIndex] = {
-                                      ...newVariants[variantIndex].ingredients[ingredientIndex],
-                                      ingredient_id: ing.id,
-                                      unit: ing.unit
-                                    };
-                                    setRecipe(prev => ({ ...prev, variants: newVariants }));
-                                    setSearchTerms({
-                                      ...searchTerms,
-                                      [`${variantIndex}-${ingredientIndex}`]: ing.name
-                                    });
-                                  }}
-                                  className="w-full text-left px-4 py-2 text-sage-700 
-                                    hover:bg-sage-50 transition-colors duration-200"
-                                >
-                                  {ing.name}
-                                </button>
-                              ))}
-                            {!availableIngredients.some(ing => 
-                              ing.name.toLowerCase() === 
-                              searchTerms[`${variantIndex}-${ingredientIndex}`].toLowerCase()
-                            ) && (
-                              <button
-                                type="button"
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  setIsAddingNewIngredient(true);
-                                  setNewIngredientData({
-                                    ...newIngredientData,
-                                    name: searchTerms[`${variantIndex}-${ingredientIndex}`]
-                                  });
-                                  setEditingIngredientIndex(`${variantIndex}-${ingredientIndex}`);
-                                }}
-                                className="w-full text-left px-4 py-2 text-earth-600 
-                                  hover:bg-sage-50 transition-colors duration-200 
-                                  border-t border-sage-200"
-                              >
-                                + Créer "{searchTerms[`${variantIndex}-${ingredientIndex}`]}"
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      <input
-                        type="number"
-                        value={ingredient.quantity}
-                        onChange={(e) => {
-                          const newVariants = [...recipe.variants];
-                          newVariants[variantIndex].ingredients[ingredientIndex].quantity = 
-                            e.target.value;
-                          setRecipe(prev => ({ ...prev, variants: newVariants }));
-                        }}
-                        placeholder="Quantité"
-                        className="w-full rounded-lg border-sage-300 shadow-soft
-                          focus:border-earth-500 focus:ring-earth-500 transition-shadow duration-200"
-                      />
-
-                      <div className="flex gap-2">
-                        <select
-                          value={ingredient.unit || ''}
-                          onChange={(e) => {
-                            const newVariants = [...recipe.variants];
-                            newVariants[variantIndex].ingredients[ingredientIndex].unit = 
-                              e.target.value;
-                            setRecipe(prev => ({ ...prev, variants: newVariants }));
-                          }}
-                          className="w-full rounded-lg border-sage-300 shadow-soft
-                            focus:border-earth-500 focus:ring-earth-500 transition-shadow duration-200"
-                        >
-                          <option value="">Sans unité</option>
-                          {units.map(unit => (
-                            <option key={unit.value} value={unit.value}>
-                              {unit.label}
-                            </option>
-                          ))}
-                        </select>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newVariants = [...recipe.variants];
-                            newVariants[variantIndex].ingredients = 
-                              newVariants[variantIndex].ingredients
-                                .filter((_, i) => i !== ingredientIndex);
-                            setRecipe(prev => ({ ...prev, variants: newVariants }));
-                            const newSearchTerms = { ...searchTerms };
-                            delete newSearchTerms[`${variantIndex}-${ingredientIndex}`];
-                            setSearchTerms(newSearchTerms);
-                          }}
-                          className="p-2 text-sage-400 hover:text-red-500 
-                            transition-colors duration-200"
-                        >
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" 
-                            stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" 
-                              strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+  <RecipeIngredientForm
+    ingredients={variant.ingredients}
+    searchTerms={searchTerms}
+    setSearchTerms={setSearchTerms}
+    editingIngredientIndex={editingIngredientIndex}
+    setEditingIngredientIndex={setEditingIngredientIndex}
+    recipe={recipe}
+    setRecipe={setRecipe}
+    availableIngredients={availableIngredients}
+    setAvailableIngredients={setAvailableIngredients}
+    units={units}
+    variant={variant}
+    variantIndex={variantIndex}
+  />
+</div>
 
               {/* Variant Instructions */}
               <div>
@@ -918,22 +687,37 @@ const CreateRecipe = () => {
 
         {/* Form Actions */}
         <div className="flex justify-end gap-4">
-          <button
-            type="button"
-            onClick={() => navigate('/recipes')}
-            className="px-4 py-2 text-sage-700 bg-sage-100 rounded-lg 
-              hover:bg-sage-200 transition-colors duration-200"
-          >
-            Annuler
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 text-white bg-earth-600 rounded-lg 
-              hover:bg-earth-700 transition-colors duration-200"
-          >
-            Créer la recette
-          </button>
-        </div>
+  <button
+    type="button"
+    onClick={() => navigate('/recipes')}
+    disabled={isSubmitting}
+    className="px-4 py-2 text-sage-700 bg-sage-100 rounded-lg 
+      hover:bg-sage-200 transition-colors duration-200"
+  >
+    Annuler
+  </button>
+  <button
+    type="submit"
+    disabled={isSubmitting}
+    className="px-4 py-2 text-white bg-earth-600 rounded-lg 
+      hover:bg-earth-700 transition-colors duration-200 
+      disabled:opacity-50 disabled:cursor-not-allowed"
+  >
+    {isSubmitting ? (
+      <div className="flex items-center">
+        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" 
+          xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" 
+            strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 
+            0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 
+            7.938l3-2.647z"></path>
+        </svg>
+        Création en cours...
+      </div>
+    ) : 'Créer la recette'}
+  </button>
+</div>
       </form>
 
       {/* New Ingredient Modal */}
