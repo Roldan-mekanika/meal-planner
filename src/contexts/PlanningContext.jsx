@@ -1,29 +1,29 @@
-// src/contexts/PlanningContext.jsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  updateDoc, 
-  deleteDoc 
-} from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 const PlanningContext = createContext();
+
+export const usePlanning = () => {
+  const context = useContext(PlanningContext);
+  if (!context) {
+    throw new Error('usePlanning must be used within a PlanningProvider');
+  }
+  return context;
+};
 
 export const PlanningProvider = ({ children }) => {
   const [weeklyPlan, setWeeklyPlan] = useState(null);
   const [currentWeek, setCurrentWeek] = useState(new Date());
 
-  // Générer un ID unique pour une semaine
+  // Génère un ID unique pour une semaine
   const getWeekId = (date) => {
     const firstDayOfWeek = new Date(date);
-    firstDayOfWeek.setDate(date.getDate() - date.getDay());
+    firstDayOfWeek.setDate(date.getDate() - date.getDay() + 1); // Commence le lundi
     return firstDayOfWeek.toISOString().split('T')[0];
   };
 
-  // Charger le plan de la semaine
+  // Charge le plan de la semaine
   const loadWeeklyPlan = async (week = new Date()) => {
     const weekId = getWeekId(week);
     try {
@@ -33,7 +33,7 @@ export const PlanningProvider = ({ children }) => {
       if (docSnap.exists()) {
         setWeeklyPlan(docSnap.data());
       } else {
-        // Créer un nouveau plan s'il n'existe pas
+        // Crée un nouveau plan s'il n'existe pas
         const newPlan = {
           id: weekId,
           monday: { lunch: null, dinner: null },
@@ -48,12 +48,12 @@ export const PlanningProvider = ({ children }) => {
         setWeeklyPlan(newPlan);
       }
     } catch (error) {
-      console.error("Erreur lors du chargement du plan:", error);
+      console.error('Error loading weekly plan:', error);
     }
   };
 
-  // Mettre à jour un repas dans le plan
-  const updateMeal = async (day, mealType, recipeId) => {
+  // Met à jour un repas
+  const updateMeal = async (day, mealType, mealInfo) => {
     if (!weeklyPlan) return;
 
     try {
@@ -64,18 +64,21 @@ export const PlanningProvider = ({ children }) => {
         ...weeklyPlan,
         [day]: {
           ...weeklyPlan[day],
-          [mealType]: recipeId
+          [mealType]: {
+            recipeId: mealInfo.recipeId,
+            variantIndex: mealInfo.variantIndex
+          }
         }
       };
 
       await updateDoc(docRef, updatedPlan);
       setWeeklyPlan(updatedPlan);
     } catch (error) {
-      console.error("Erreur lors de la mise à jour du repas:", error);
+      console.error('Error updating meal:', error);
     }
   };
 
-  // Supprimer un repas du plan
+  // Supprime un repas
   const removeMeal = async (day, mealType) => {
     if (!weeklyPlan) return;
 
@@ -94,52 +97,11 @@ export const PlanningProvider = ({ children }) => {
       await updateDoc(docRef, updatedPlan);
       setWeeklyPlan(updatedPlan);
     } catch (error) {
-      console.error("Erreur lors de la suppression du repas:", error);
+      console.error('Error removing meal:', error);
     }
   };
 
-  // Générer la liste de courses
-  const generateShoppingList = async () => {
-    if (!weeklyPlan) return [];
-
-    try {
-      // Récupérer tous les RecipeIds planifiés
-      const recipeIds = Object.values(weeklyPlan)
-        .flatMap(day => [day.lunch, day.dinner])
-        .filter(id => id !== null);
-
-      // Charger les détails de chaque recette
-      const recipePromises = recipeIds.map(async (recipeId) => {
-        const recipeDoc = await getDoc(doc(db, 'recipes', recipeId));
-        return recipeDoc.exists() ? recipeDoc.data() : null;
-      });
-
-      const recipes = await Promise.all(recipePromises);
-
-      // Agréger les ingrédients
-      const ingredientsMap = new Map();
-      recipes.forEach(recipe => {
-        recipe.base_ingredients.forEach(ing => {
-          const key = ing.ingredient_id;
-          const existingIng = ingredientsMap.get(key);
-          
-          if (existingIng) {
-            existingIng.quantity += parseFloat(ing.quantity);
-          } else {
-            ingredientsMap.set(key, { ...ing });
-          }
-        });
-      });
-
-      // Convertir la Map en liste
-      return Array.from(ingredientsMap.values());
-    } catch (error) {
-      console.error("Erreur lors de la génération de la liste de courses:", error);
-      return [];
-    }
-  };
-
-  // Initialiser le plan de la semaine au chargement
+  // Charge le plan initial et recharge quand la semaine change
   useEffect(() => {
     loadWeeklyPlan(currentWeek);
   }, [currentWeek]);
@@ -151,19 +113,9 @@ export const PlanningProvider = ({ children }) => {
       setCurrentWeek,
       updateMeal,
       removeMeal,
-      generateShoppingList,
       loadWeeklyPlan
     }}>
       {children}
     </PlanningContext.Provider>
   );
-};
-
-// Hook personnalisé pour utiliser le contexte de planification
-export const usePlanning = () => {
-  const context = useContext(PlanningContext);
-  if (!context) {
-    throw new Error('usePlanning must be used within a PlanningProvider');
-  }
-  return context;
 };
