@@ -1,37 +1,30 @@
 // src/pages/Config/Config.jsx
 import React from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
+import FilterSettings from '../../components/config/FilterSettings';
+import TabNavigation from '../../components/common/TabNavigation';
 
 const Config = () => {
+  const location = useLocation();
+  
+  const tabs = [
+    { path: '/config/tags', label: 'Tags' },
+    { path: '/config/ingredients', label: 'Ingrédients' }
+  ];
+
   return (
     <div className="max-w-7xl mx-auto py-6">
-      {/* Navigation secondaire */}
-      <div className="mb-6 border-b border-gray-200">
-        <nav className="flex space-x-8">
-          <Link
-            to="/config/tags"
-            className={`pb-4 px-1 border-b-2 font-medium text-sm ${
-              location.pathname === '/config/tags'
-                ? 'border-green-500 text-green-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Tags
-          </Link>
-          <Link
-            to="/config/ingredients"
-            className={`pb-4 px-1 border-b-2 font-medium text-sm ${
-              location.pathname === '/config/ingredients'
-                ? 'border-green-500 text-green-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Ingrédients
-          </Link>
-        </nav>
-      </div>
+      {/* Navigation par onglets */}
+      <TabNavigation tabs={tabs} />
 
-      {/* Contenu */}
+      {/* Paramètres des filtres - uniquement dans l'onglet Tags */}
+      {location.pathname === '/config/tags' && (
+        <div className="mb-8">
+          <FilterSettings />
+        </div>
+      )}
+
+      {/* Contenu de l'onglet */}
       <Outlet />
     </div>
   );

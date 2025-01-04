@@ -2,15 +2,23 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { ingredientCategories } from '../../config/categories';
+import { ingredientCategories, months } from '../../config/categories';
+import SeasonSelector from '../../components/common/SeasonSelector';
 
 const Ingredients = () => {
   const [ingredients, setIngredients] = useState([]);
+  // État initial avec les saisons
   const [newIngredient, setNewIngredient] = useState({ 
     name: '', 
     category: 'legumes',
-    unit: 'g' // unité par défaut
+    unit: 'g',
+    seasons: []
   });
+  
+  // Debug: Log l'état quand il change
+  useEffect(() => {
+    console.log('Current ingredient state:', newIngredient);
+  }, [newIngredient]);
   const [isEditing, setIsEditing] = useState(false);
   const [editingIngredient, setEditingIngredient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,10 +37,15 @@ const Ingredients = () => {
   useEffect(() => {
     const fetchIngredients = async () => {
       const querySnapshot = await getDocs(collection(db, 'ingredients'));
-      const ingredientsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const ingredientsData = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        console.log('Ingredient loaded:', { id: doc.id, ...data }); // Debug log
+        return {
+          id: doc.id,
+          ...data,
+          seasons: data.seasons || [] // Ensure seasons is always an array
+        };
+      });
       setIngredients(ingredientsData);
     };
     fetchIngredients();
@@ -43,20 +56,23 @@ const Ingredients = () => {
     if (!newIngredient.name.trim()) return;
 
     try {
+      const ingredientData = {
+        name: newIngredient.name,
+        category: newIngredient.category,
+        unit: newIngredient.unit,
+        seasons: newIngredient.category === 'legumes' ? newIngredient.seasons : []
+      };
+
       if (isEditing && editingIngredient) {
-        await updateDoc(doc(db, 'ingredients', editingIngredient.id), {
-          name: newIngredient.name,
-          category: newIngredient.category,
-          unit: newIngredient.unit
-        });
+        await updateDoc(doc(db, 'ingredients', editingIngredient.id), ingredientData);
         setIngredients(ingredients.map(ingredient => 
-          ingredient.id === editingIngredient.id ? { ...ingredient, ...newIngredient } : ingredient
+          ingredient.id === editingIngredient.id ? { ...ingredient, ...ingredientData } : ingredient
         ));
       } else {
-        const docRef = await addDoc(collection(db, 'ingredients'), newIngredient);
-        setIngredients([...ingredients, { id: docRef.id, ...newIngredient }]);
+        const docRef = await addDoc(collection(db, 'ingredients'), ingredientData);
+        setIngredients([...ingredients, { id: docRef.id, ...ingredientData }]);
       }
-      setNewIngredient({ name: '', category: 'legumes', unit: 'g' });
+      setNewIngredient({ name: '', category: 'legumes', unit: 'g', seasons: [] });
       setIsEditing(false);
       setEditingIngredient(null);
     } catch (error) {
@@ -64,16 +80,8 @@ const Ingredients = () => {
     }
   };
 
-  const filteredIngredients = ingredients.filter(ingredient => {
-    const matchesSearch = ingredient.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || ingredient.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  // Dans Config/Ingredients.jsx
-const handleDeleteIngredient = async (ingredientId) => {
+  const handleDeleteIngredient = async (ingredientId) => {
     try {
-      // Compter les recettes utilisant cet ingrédient
       const recipesSnapshot = await getDocs(collection(db, 'recipes'));
       const recipesUsingIngredient = recipesSnapshot.docs.filter(doc => {
         const recipeData = doc.data();
@@ -82,9 +90,9 @@ const handleDeleteIngredient = async (ingredientId) => {
                  variant.ingredients.some(ing => ing.ingredient_id === ingredientId)
                );
       });
-  
+
       const recipeCount = recipesUsingIngredient.length;
-  
+
       if (recipeCount > 0) {
         const confirm = window.confirm(
           `Cet ingrédient est utilisé dans ${recipeCount} recette${recipeCount > 1 ? 's' : ''}. Êtes-vous sûr de vouloir le supprimer ?`
@@ -94,13 +102,27 @@ const handleDeleteIngredient = async (ingredientId) => {
         const confirm = window.confirm('Êtes-vous sûr de vouloir supprimer cet ingrédient ?');
         if (!confirm) return;
       }
-  
+
       await deleteDoc(doc(db, 'ingredients', ingredientId));
       setIngredients(ingredients.filter(ing => ing.id !== ingredientId));
     } catch (error) {
       console.error("Erreur lors de la suppression de l'ingrédient:", error);
       alert("Une erreur s'est produite lors de la suppression de l'ingrédient");
     }
+  };
+
+  const filteredIngredients = ingredients.filter(ingredient => {
+    const matchesSearch = ingredient.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === 'all' || ingredient.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const formatSeasons = (seasons) => {
+    if (!seasons || seasons.length === 0) return 'Toute l\'année';
+    return seasons
+      .map(monthId => months.find(m => m.id === monthId)?.name)
+      .filter(Boolean)
+      .join(', ');
   };
 
   return (
@@ -163,6 +185,27 @@ const handleDeleteIngredient = async (ingredientId) => {
             </div>
           </div>
 
+          {/* Sélecteur de saisons pour les légumes */}
+          {newIngredient.category === 'legumes' && (
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Mois de disponibilité
+              </label>
+              <SeasonSelector
+                selectedMonths={newIngredient.seasons || []}
+                onChange={(seasons) => {
+                  console.log('Seasons selected:', seasons); // Debug log
+                  setNewIngredient(prev => ({ ...prev, seasons }));
+                }}
+              />
+              <div className="mt-2 text-sm text-gray-500">
+                {newIngredient.seasons?.length 
+                  ? `Sélectionné: ${formatSeasons(newIngredient.seasons)}` 
+                  : 'Aucun mois sélectionné (disponible toute l\'année)'}
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end space-x-3">
             {isEditing && (
               <button
@@ -170,7 +213,7 @@ const handleDeleteIngredient = async (ingredientId) => {
                 onClick={() => {
                   setIsEditing(false);
                   setEditingIngredient(null);
-                  setNewIngredient({ name: '', category: 'legumes', unit: 'g' });
+                  setNewIngredient({ name: '', category: 'legumes', unit: 'g', seasons: [] });
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
@@ -238,18 +281,27 @@ const handleDeleteIngredient = async (ingredientId) => {
               </h3>
               <div className="flex flex-wrap gap-2">
                 {categoryIngredients.map(ingredient => (
-                  <span
+                  <div
                     key={ingredient.id}
-                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${ingredientCategories[ingredient.category].color}`}
+                    className={`group relative inline-flex items-center px-3 py-1 rounded-full text-sm ${ingredientCategories[ingredient.category].color}`}
                   >
-                    {ingredient.name} ({ingredient.unit})
+                    <span>{ingredient.name} ({ingredient.unit})</span>
+                    {ingredient.category === 'legumes' && ingredient.seasons?.length > 0 && (
+                      <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 w-48 p-2 bg-white rounded-lg shadow-lg text-xs text-gray-600">
+                        <strong>Disponible:</strong> {formatSeasons(ingredient.seasons)}
+                      </div>
+                    )}
                     <button
                       onClick={() => {
-                        setNewIngredient({
+                        console.log('Editing ingredient:', ingredient); // Debug log
+                        const editedIngredient = {
                           name: ingredient.name,
                           category: ingredient.category,
-                          unit: ingredient.unit
-                        });
+                          unit: ingredient.unit,
+                          seasons: ingredient.seasons || []
+                        };
+                        console.log('Setting edited ingredient:', editedIngredient); // Debug log
+                        setNewIngredient(editedIngredient);
                         setIsEditing(true);
                         setEditingIngredient(ingredient);
                       }}
@@ -258,19 +310,12 @@ const handleDeleteIngredient = async (ingredientId) => {
                       ✏️
                     </button>
                     <button
-                      onClick={async () => {
-                        try {
-                          await deleteDoc(doc(db, 'ingredients', ingredient.id));
-                          setIngredients(ingredients.filter(i => i.id !== ingredient.id));
-                        } catch (error) {
-                          console.error("Erreur lors de la suppression:", error);
-                        }
-                      }}
+                      onClick={() => handleDeleteIngredient(ingredient.id)}
                       className="ml-1 hover:text-red-600"
                     >
                       ✖️
                     </button>
-                  </span>
+                  </div>
                 ))}
               </div>
             </div>

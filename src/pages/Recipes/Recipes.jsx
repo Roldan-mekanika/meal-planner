@@ -4,20 +4,29 @@ import { Link } from 'react-router-dom';
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import RecipeCard from '../../components/recipes/RecipeCard';
+import RecipeFilters from '../../components/recipes/RecipeFilters';
+import { tagCategories } from '../../config/categories';
+import useRecipeFilters from '../../hooks/useRecipeFilters';
 
 const Recipes = () => {
   const [recipes, setRecipes] = useState([]);
   const [tags, setTags] = useState([]);
+  const [ingredients, setIngredients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTag, setSelectedTag] = useState('');
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [seasonalSearchEnabled, setSeasonalSearchEnabled] = useState(false);
+  const [activeTagCategory, setActiveTagCategory] = useState('all');
 
+  // Effet pour charger les données initiales
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [recipesSnapshot, tagsSnapshot] = await Promise.all([
+        const [recipesSnapshot, tagsSnapshot, ingredientsSnapshot] = await Promise.all([
           getDocs(collection(db, 'recipes')),
-          getDocs(collection(db, 'tags'))
+          getDocs(collection(db, 'tags')),
+          getDocs(collection(db, 'ingredients'))
         ]);
 
         setRecipes(recipesSnapshot.docs.map(doc => ({
@@ -26,6 +35,11 @@ const Recipes = () => {
         })));
 
         setTags(tagsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })));
+
+        setIngredients(ingredientsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })));
@@ -39,21 +53,39 @@ const Recipes = () => {
     fetchData();
   }, []);
 
+  // Effet pour réinitialiser le mois sélectionné quand la recherche saisonnière est désactivée
+  useEffect(() => {
+    if (!seasonalSearchEnabled) {
+      setSelectedMonth('');
+    }
+  }, [seasonalSearchEnabled]);
+
+  // Utilisation du hook de filtrage
+  const {
+    filteredRecipes,
+    groupedTags,
+    filterStats,
+  } = useRecipeFilters(
+    recipes,
+    tags,
+    ingredients,
+    searchTerm,
+    selectedTags,
+    selectedMonth,
+    seasonalSearchEnabled
+  );
+
   const handleDeleteRecipe = async (recipeId) => {
-    try {
-      await deleteDoc(doc(db, 'recipes', recipeId));
-      setRecipes(recipes.filter(recipe => recipe.id !== recipeId));
-    } catch (error) {
-      console.error("Erreur lors de la suppression:", error);
-      alert("Erreur lors de la suppression de la recette");
+    if (window.confirm('Êtes-vous sûr de vouloir supprimer cette recette ?')) {
+      try {
+        await deleteDoc(doc(db, 'recipes', recipeId));
+        setRecipes(recipes.filter(recipe => recipe.id !== recipeId));
+      } catch (error) {
+        console.error("Erreur lors de la suppression:", error);
+        alert("Erreur lors de la suppression de la recette");
+      }
     }
   };
-
-  const filteredRecipes = recipes.filter(recipe => {
-    const matchesSearch = recipe.title.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesTag = selectedTag ? recipe.tags?.includes(selectedTag) : true;
-    return matchesSearch && matchesTag;
-  });
 
   if (loading) {
     return (
@@ -65,13 +97,17 @@ const Recipes = () => {
 
   return (
     <div className="py-8 px-4 sm:px-6 lg:px-8 animate-fade-in">
-      {/* Header */}
       <div className="max-w-7xl mx-auto">
+        {/* En-tête avec statistiques */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
-          <div className="mb-4 sm:mb-0">
+          <div>
             <h1 className="text-3xl font-bold text-sage-900">Mes Recettes</h1>
             <p className="mt-2 text-sage-600">
-              {recipes.length} {recipes.length > 1 ? 'recettes' : 'recette'} dans votre collection
+              {filterStats.filtered} {filterStats.filtered > 1 ? 'recettes' : 'recette'}
+              {filterStats.filtered !== filterStats.total && ` sur ${filterStats.total}`}
+              {filterStats.activeFilters.hasSearch && ' correspondent à votre recherche'}
+              {filterStats.activeFilters.tagCount > 0 && ' correspondent aux tags sélectionnés'}
+              {filterStats.activeFilters.hasSeason && ' disponibles en cette saison'}
             </p>
           </div>
           <Link
@@ -85,48 +121,32 @@ const Recipes = () => {
               viewBox="0 0 24 24" 
               stroke="currentColor"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                d="M12 4v16m8-8H4" />
             </svg>
             Créer une recette
           </Link>
         </div>
 
         {/* Filtres */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mb-8">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Rechercher une recette..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-lg border-sage-300 shadow-soft 
-                focus:border-earth-500 focus:ring-earth-500 transition-shadow duration-200
-                placeholder-sage-400"
-            />
-            <svg 
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-sage-400" 
-              fill="none" 
-              viewBox="0 0 24 24" 
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
-              />
-            </svg>
-          </div>
-          
-          <select
-            value={selectedTag}
-            onChange={(e) => setSelectedTag(e.target.value)}
-            className="w-full rounded-lg border-sage-300 shadow-soft focus:border-earth-500 
-              focus:ring-earth-500 transition-shadow duration-200 text-sage-700"
-          >
-            <option value="">Tous les tags</option>
-            {tags.map(tag => (
-              <option key={tag.id} value={tag.id}>{tag.name}</option>
-            ))}
-          </select>
-        </div>
+        <RecipeFilters
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          seasonalSearchEnabled={seasonalSearchEnabled}
+          setSeasonalSearchEnabled={setSeasonalSearchEnabled}
+          selectedMonth={selectedMonth}
+          setSelectedMonth={(value) => {
+            setSelectedMonth(value);
+            if (value && !seasonalSearchEnabled) {
+              setSeasonalSearchEnabled(true);
+            }
+          }}
+          selectedTags={selectedTags}
+          setSelectedTags={setSelectedTags}
+          activeTagCategory={activeTagCategory}
+          setActiveTagCategory={setActiveTagCategory}
+          groupedTags={groupedTags}
+        />
 
         {/* Liste des recettes */}
         {filteredRecipes.length === 0 ? (
@@ -143,15 +163,23 @@ const Recipes = () => {
             </svg>
             <h3 className="mt-4 text-lg font-medium text-sage-900">Aucune recette trouvée</h3>
             <p className="mt-2 text-sage-600">
-              Commencez à créer votre collection de recettes dès maintenant.
+              {filterStats.activeFilters.hasSearch || 
+               filterStats.activeFilters.tagCount > 0 || 
+               filterStats.activeFilters.hasSeason 
+                ? 'Essayez de modifier vos critères de recherche.'
+                : 'Commencez à créer votre collection de recettes.'}
             </p>
-            <Link
-              to="/recipes/create"
-              className="mt-4 inline-flex items-center px-4 py-2 bg-earth-600 text-white 
-                rounded-lg hover:bg-earth-700 transition-colors duration-200"
-            >
-              Créer votre première recette
-            </Link>
+            {!filterStats.activeFilters.hasSearch && 
+             !filterStats.activeFilters.tagCount && 
+             !filterStats.activeFilters.hasSeason && (
+              <Link
+                to="/recipes/create"
+                className="mt-4 inline-flex items-center px-4 py-2 bg-earth-600 text-white 
+                  rounded-lg hover:bg-earth-700 transition-colors duration-200"
+              >
+                Créer votre première recette
+              </Link>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
