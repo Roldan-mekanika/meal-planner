@@ -52,74 +52,93 @@ export const PlanningProvider = ({ children }) => {
 
   const updateMeal = async (day, mealType, mealInfo) => {
     if (!weeklyPlan) return;
-
+  
     try {
       const weekId = getWeekId(currentWeek);
       const docRef = doc(db, 'weekly_plans', weekId);
       
+      // On s'assure que la liste des repas existe
+      const currentMeals = weeklyPlan[day][mealType] || [];
+      const updatedMeals = Array.isArray(currentMeals) ? currentMeals : [currentMeals];
+      
+      // On ajoute le nouveau repas à la liste
+      updatedMeals.push({
+        recipeId: mealInfo.recipeId,
+        variantIndex: mealInfo.variantIndex,
+        servings: mealInfo.servings || 4
+      });
+  
       const updatedPlan = {
         ...weeklyPlan,
         [day]: {
           ...weeklyPlan[day],
-          [mealType]: {
-            recipeId: mealInfo.recipeId,
-            variantIndex: mealInfo.variantIndex,
-            servings: mealInfo.servings || 4 // Valeur par défaut de 4 personnes
-          }
+          [mealType]: updatedMeals
         }
       };
-
+  
       await updateDoc(docRef, updatedPlan);
       setWeeklyPlan(updatedPlan);
     } catch (error) {
       console.error('Error updating meal:', error);
     }
   };
-
-  const updateServings = async (day, mealType, servings) => {
-    if (!weeklyPlan?.[day]?.[mealType]) return;
-
-    try {
-      const weekId = getWeekId(currentWeek);
-      const docRef = doc(db, 'weekly_plans', weekId);
-      
-      const updatedPlan = {
-        ...weeklyPlan,
-        [day]: {
-          ...weeklyPlan[day],
-          [mealType]: {
-            ...weeklyPlan[day][mealType],
-            servings: servings
-          }
-        }
-      };
-
-      await updateDoc(docRef, updatedPlan);
-      setWeeklyPlan(updatedPlan);
-    } catch (error) {
-      console.error('Error updating servings:', error);
-    }
-  };
-
-  const removeMeal = async (day, mealType) => {
+  
+  const removeMeal = async (day, mealType, index) => {
     if (!weeklyPlan) return;
-
+  
     try {
       const weekId = getWeekId(currentWeek);
       const docRef = doc(db, 'weekly_plans', weekId);
+      
+      const currentMeals = weeklyPlan[day][mealType];
+      if (!Array.isArray(currentMeals)) return;
+  
+      const updatedMeals = [...currentMeals];
+      updatedMeals.splice(index, 1);
       
       const updatedPlan = {
         ...weeklyPlan,
         [day]: {
           ...weeklyPlan[day],
-          [mealType]: null
+          [mealType]: updatedMeals.length > 0 ? updatedMeals : null
         }
       };
-
+  
       await updateDoc(docRef, updatedPlan);
       setWeeklyPlan(updatedPlan);
     } catch (error) {
       console.error('Error removing meal:', error);
+    }
+  };
+  
+  const updateServings = async (day, mealType, servings, index) => {
+    if (!weeklyPlan?.[day]?.[mealType]) return;
+  
+    try {
+      const weekId = getWeekId(currentWeek);
+      const docRef = doc(db, 'weekly_plans', weekId);
+      
+      const currentMeals = weeklyPlan[day][mealType];
+      if (!Array.isArray(currentMeals)) return;
+  
+      const updatedMeals = [...currentMeals];
+      updatedMeals[index] = {
+        ...updatedMeals[index],
+        servings: servings
+      };
+      
+      const updatedPlan = {
+        ...weeklyPlan,
+        [day]: {
+          ...weeklyPlan[day],
+          [mealType]: updatedMeals
+        }
+      };
+  
+      await updateDoc(docRef, updatedPlan);
+      setWeeklyPlan(updatedPlan);
+    } catch (error) {
+      console.error('Error updating servings:', error);
     }
   };
 

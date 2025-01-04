@@ -1,7 +1,6 @@
-// src/components/planning/CalendarGrid/index.jsx
-import React, { useState } from 'react';
+import React from 'react';
+import { Link } from 'react-router-dom';
 import { usePlanning } from '../../../contexts/PlanningContext';
-import ServingsControl from '../ServingsControl';
 
 const days = {
   monday: 'Lundi',
@@ -18,9 +17,103 @@ const mealTypes = {
   dinner: 'Soir'
 };
 
+const PortionsControl = ({ value = 4, onChange }) => {
+  return (
+    <div className="flex flex-col items-start">
+      <span className="text-earth-600 text-sm mb-1">Portions:</span>
+      <div className="flex items-center gap-1">
+        <div className="flex flex-col">
+          <button
+            onClick={() => onChange(value + 1)}
+            className="p-1 text-sage-500 hover:text-earth-600 hover:bg-earth-50 rounded transition-colors"
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
+              <path d="M7 14l5-5 5 5z" />
+            </svg>
+          </button>
+          <button
+            onClick={() => onChange(Math.max(1, value - 1))}
+            className="p-1 text-sage-500 hover:text-earth-600 hover:bg-earth-50 rounded transition-colors"
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
+              <path d="M7 10l5 5 5-5z" />
+            </svg>
+          </button>
+        </div>
+        <span className="text-lg font-medium text-earth-700 w-6 text-center">
+          {value}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+const MealCard = ({ meal, dayKey, typeKey, onRemove, getRecipeTitle, updateServings, index }) => {
+  return (
+    <div className="group bg-earth-50 rounded-lg p-3">
+      <div className="flex justify-between items-start">
+        <Link
+          to={`/recipes/${meal.recipeId}`}
+          className="text-earth-700 hover:text-earth-800 font-medium leading-tight break-words flex-1"
+        >
+          {getRecipeTitle(meal)}
+        </Link>
+        <button
+          onClick={() => onRemove(dayKey, typeKey, index)}
+          className="ml-2 p-1.5 text-sage-400 hover:text-red-500 rounded-lg 
+            hover:bg-earth-50 transition-colors sm:opacity-0 sm:group-hover:opacity-100"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />
+          </svg>
+        </button>
+      </div>
+      <div className="mt-2">
+        <PortionsControl
+          value={meal.servings || 4}
+          onChange={(newValue) => updateServings(dayKey, typeKey, newValue, index)}
+        />
+      </div>
+    </div>
+  );
+};
+
+const CalendarCell = ({ dayKey, typeKey, meals, onSelectMeal, onRemoveMeal, getRecipeTitle, updateServings }) => {
+  return (
+    <div className="min-h-[120px] bg-white p-4 relative">
+      <div className="flex justify-between items-center mb-3">
+        <span className="text-sm font-medium text-sage-700">{mealTypes[typeKey]}</span>
+        <button
+          onClick={() => onSelectMeal(dayKey, typeKey)}
+          className="p-1.5 text-sage-500 hover:text-earth-600 rounded-lg hover:bg-earth-50 
+            transition-colors"
+          aria-label="Ajouter un repas"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+          </svg>
+        </button>
+      </div>
+      <div className="space-y-3">
+        {Array.isArray(meals) && meals.map((meal, index) => (
+          <MealCard
+            key={`${meal.recipeId}-${index}`}
+            meal={meal}
+            dayKey={dayKey}
+            typeKey={typeKey}
+            index={index}
+            onRemove={onRemoveMeal}
+            getRecipeTitle={getRecipeTitle}
+            updateServings={updateServings}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const CalendarGrid = ({ recipes, onSelectMeal }) => {
   const { weeklyPlan, currentWeek, setCurrentWeek, updateServings, removeMeal } = usePlanning();
-  const [hoveredCell, setHoveredCell] = useState(null);
 
   const handleDateChange = (direction) => {
     const newWeek = new Date(currentWeek);
@@ -28,15 +121,11 @@ const CalendarGrid = ({ recipes, onSelectMeal }) => {
     setCurrentWeek(newWeek);
   };
 
-  const formatDate = (date, day) => {
+  const formatDate = (date, dayKey) => {
     const dayDate = new Date(date);
-    const dayIndex = Object.keys(days).indexOf(day);
+    const dayIndex = Object.keys(days).indexOf(dayKey);
     dayDate.setDate(date.getDate() - date.getDay() + (dayIndex === 6 ? 7 : dayIndex + 1));
-    
-    return dayDate.toLocaleDateString('fr-FR', {
-      day: 'numeric',
-      month: 'short'
-    });
+    return dayDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   };
 
   const getRecipeTitle = (meal) => {
@@ -51,119 +140,67 @@ const CalendarGrid = ({ recipes, onSelectMeal }) => {
     return title;
   };
 
-  const handleServingsChange = (day, mealType, servings) => {
-    updateServings(day, mealType, servings);
-  };
-
   return (
-    <div className="max-w-7xl mx-auto bg-white rounded-lg shadow-soft overflow-hidden">
-      {/* Header de navigation */}
-      <div className="bg-sage-50 px-6 py-4 border-b border-sage-200">
+    <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-sage-200 bg-sage-50">
         <div className="flex justify-between items-center">
-          <button 
+          <button
             onClick={() => handleDateChange('prev')}
-            className="p-2 text-sage-700 hover:text-earth-600 
-              transition-colors duration-200 rounded-lg hover:bg-sage-100"
+            className="p-2 text-sage-600 hover:text-earth-600 rounded-lg hover:bg-sage-100 
+              transition-colors"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                d="M15 19l-7-7 7-7" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          
-          <h2 className="text-xl font-semibold text-sage-900">
+          <h2 className="text-lg font-semibold text-sage-900">
             Semaine du {formatDate(currentWeek, 'monday')}
           </h2>
-          
-          <button 
+          <button
             onClick={() => handleDateChange('next')}
-            className="p-2 text-sage-700 hover:text-earth-600 
-              transition-colors duration-200 rounded-lg hover:bg-sage-100"
+            className="p-2 text-sage-600 hover:text-earth-600 rounded-lg hover:bg-sage-100 
+              transition-colors"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                d="M9 5l7 7-7 7" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
         </div>
       </div>
 
-      {/* Grille du calendrier */}
-      <div className="grid grid-cols-7 bg-white divide-x divide-sage-200">
-        {/* En-têtes des jours */}
-        {Object.entries(days).map(([dayKey, dayName]) => (
-          <div key={dayKey} 
-            className="px-2 py-3 text-center bg-sage-50 border-b border-sage-200">
-            <div className="font-medium text-sage-900">{dayName}</div>
-            <div className="text-sm text-sage-600">
-              {formatDate(currentWeek, dayKey)}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Corps du calendrier - divisé en dejeuner/diner */}
-      <div className="grid grid-cols-7 divide-x divide-sage-200">
-        {Object.entries(mealTypes).map(([typeKey, typeName], mealIndex) => (
-          <React.Fragment key={typeKey}>
-            {Object.keys(days).map((dayKey, dayIndex) => (
-              <div key={`${dayKey}-${typeKey}`} 
-                className={`relative min-h-[140px] p-3 
-                ${mealIndex === 0 ? 'border-b border-sage-200' : ''}`}
-                onMouseEnter={() => setHoveredCell(`${dayKey}-${typeKey}`)}
-                onMouseLeave={() => setHoveredCell(null)}
+      <div className="overflow-x-auto">
+        <div className="min-w-[768px]">
+          <div className="grid grid-cols-7 auto-rows-auto">
+          {Object.entries(days).map(([dayKey, dayName]) => (
+              <div key={dayKey} 
+                className="p-4 bg-sage-50 border-b border-r border-sage-200 last:border-r-0"
               >
-                {/* En-tête de la cellule */}
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-medium text-sage-600">{typeName}</span>
-                  <button
-                    onClick={() => onSelectMeal(dayKey, typeKey)}
-                    className={`p-1 text-sage-400 hover:text-earth-600 
-                      transition-colors duration-200 rounded-full hover:bg-sage-50
-                      ${hoveredCell === `${dayKey}-${typeKey}` ? 'opacity-100' : 'opacity-0'}`}
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                        d="M12 4v16m8-8H4" />
-                    </svg>
-                  </button>
+                <div className="font-semibold text-sage-900">{dayName}</div>
+                <div className="text-sm text-sage-600">
+                  {formatDate(currentWeek, dayKey)}
                 </div>
-
-                {/* Contenu de la cellule */}
-                {weeklyPlan?.[dayKey]?.[typeKey] && (
-                  <div className="relative group">
-                    <div className="p-2 bg-earth-50 rounded-lg">
-                      <div className="flex justify-between items-start mb-1">
-                        <p className="text-sm text-earth-700 line-clamp-2">
-                          {getRecipeTitle(weeklyPlan[dayKey][typeKey])}
-                        </p>
-                        <button
-                          onClick={() => removeMeal(dayKey, typeKey)}
-                          className="ml-2 p-1 text-sage-400 hover:text-red-500 
-                            transition-colors duration-200 opacity-0 group-hover:opacity-100 
-                            rounded-full hover:bg-white"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                              d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                      <div className="flex items-center mt-2 space-x-2">
-                        <span className="text-xs text-earth-600">Portions:</span>
-                        <ServingsControl
-                          value={weeklyPlan[dayKey][typeKey].servings || 4}
-                          onChange={(servings) => handleServingsChange(dayKey, typeKey, servings)}
-                          className="scale-90 origin-left"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             ))}
-          </React.Fragment>
-        ))}
+
+            {Object.entries(mealTypes).map(([typeKey]) => (
+              Object.keys(days).map((dayKey) => (
+                <div key={`${dayKey}-${typeKey}`} 
+                  className="border-b border-r border-sage-200 last:border-r-0 last-row:border-b-0"
+                >
+                  <CalendarCell
+                    dayKey={dayKey}
+                    typeKey={typeKey}
+                    meals={weeklyPlan?.[dayKey]?.[typeKey]}
+                    onSelectMeal={onSelectMeal}
+                    onRemoveMeal={removeMeal}
+                    getRecipeTitle={getRecipeTitle}
+                    updateServings={updateServings}
+                  />
+                </div>
+              ))
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
