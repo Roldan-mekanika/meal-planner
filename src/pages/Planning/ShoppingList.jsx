@@ -1,4 +1,3 @@
-// src/pages/Planning/ShoppingList.jsx
 import React, { useState, useEffect } from 'react';
 import { usePlanning } from '../../contexts/PlanningContext';
 import { ingredientCategories } from '../../config/categories';
@@ -24,17 +23,22 @@ const ShoppingList = () => {
     setLoading(true);
     try {
       const recipeIds = new Set();
-      // Collecter tous les ID de recettes et leurs portions
       const recipesWithServings = [];
+
+      // Collecter tous les IDs de recettes et leurs portions
       Object.values(weeklyPlan || {}).forEach(day => {
         ['lunch', 'dinner'].forEach(mealType => {
-          const meal = day[mealType];
-          if (meal?.recipeId) {
-            recipeIds.add(meal.recipeId);
-            recipesWithServings.push({
-              recipeId: meal.recipeId,
-              variantIndex: meal.variantIndex,
-              servings: meal.servings || 4
+          const meals = day[mealType];
+          if (Array.isArray(meals)) {
+            meals.forEach(meal => {
+              if (meal?.recipeId) {
+                recipeIds.add(meal.recipeId);
+                recipesWithServings.push({
+                  recipeId: meal.recipeId,
+                  variantIndex: meal.variantIndex,
+                  servings: meal.servings || 4
+                });
+              }
             });
           }
         });
@@ -164,7 +168,7 @@ const ShoppingList = () => {
           yOffset = 20;
         }
 
-        const itemText = `${item.quantity} ${item.unit} ${item.name}`;
+        const itemText = `${Math.round(item.quantity * 100) / 100} ${item.unit} ${item.name}`;
         doc.text(itemText, margin + 5, yOffset);
         
         doc.setFontSize(8);
