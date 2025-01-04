@@ -1,3 +1,4 @@
+// src/contexts/PlanningContext.jsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { collection, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -16,14 +17,12 @@ export const PlanningProvider = ({ children }) => {
   const [weeklyPlan, setWeeklyPlan] = useState(null);
   const [currentWeek, setCurrentWeek] = useState(new Date());
 
-  // Génère un ID unique pour une semaine
   const getWeekId = (date) => {
     const firstDayOfWeek = new Date(date);
-    firstDayOfWeek.setDate(date.getDate() - date.getDay() + 1); // Commence le lundi
+    firstDayOfWeek.setDate(date.getDate() - date.getDay() + 1);
     return firstDayOfWeek.toISOString().split('T')[0];
   };
 
-  // Charge le plan de la semaine
   const loadWeeklyPlan = async (week = new Date()) => {
     const weekId = getWeekId(week);
     try {
@@ -33,7 +32,6 @@ export const PlanningProvider = ({ children }) => {
       if (docSnap.exists()) {
         setWeeklyPlan(docSnap.data());
       } else {
-        // Crée un nouveau plan s'il n'existe pas
         const newPlan = {
           id: weekId,
           monday: { lunch: null, dinner: null },
@@ -52,7 +50,6 @@ export const PlanningProvider = ({ children }) => {
     }
   };
 
-  // Met à jour un repas
   const updateMeal = async (day, mealType, mealInfo) => {
     if (!weeklyPlan) return;
 
@@ -66,7 +63,8 @@ export const PlanningProvider = ({ children }) => {
           ...weeklyPlan[day],
           [mealType]: {
             recipeId: mealInfo.recipeId,
-            variantIndex: mealInfo.variantIndex
+            variantIndex: mealInfo.variantIndex,
+            servings: mealInfo.servings || 4 // Valeur par défaut de 4 personnes
           }
         }
       };
@@ -78,7 +76,31 @@ export const PlanningProvider = ({ children }) => {
     }
   };
 
-  // Supprime un repas
+  const updateServings = async (day, mealType, servings) => {
+    if (!weeklyPlan?.[day]?.[mealType]) return;
+
+    try {
+      const weekId = getWeekId(currentWeek);
+      const docRef = doc(db, 'weekly_plans', weekId);
+      
+      const updatedPlan = {
+        ...weeklyPlan,
+        [day]: {
+          ...weeklyPlan[day],
+          [mealType]: {
+            ...weeklyPlan[day][mealType],
+            servings: servings
+          }
+        }
+      };
+
+      await updateDoc(docRef, updatedPlan);
+      setWeeklyPlan(updatedPlan);
+    } catch (error) {
+      console.error('Error updating servings:', error);
+    }
+  };
+
   const removeMeal = async (day, mealType) => {
     if (!weeklyPlan) return;
 
@@ -101,7 +123,6 @@ export const PlanningProvider = ({ children }) => {
     }
   };
 
-  // Charge le plan initial et recharge quand la semaine change
   useEffect(() => {
     loadWeeklyPlan(currentWeek);
   }, [currentWeek]);
@@ -112,6 +133,7 @@ export const PlanningProvider = ({ children }) => {
       currentWeek,
       setCurrentWeek,
       updateMeal,
+      updateServings,
       removeMeal,
       loadWeeklyPlan
     }}>

@@ -8,7 +8,7 @@ const Card = ({
   title,           
   subtitle,        
   date,            
-  tags = [],       // Ajout d'une valeur par défaut
+  tags = [],       
   onDelete,        
   headerContent,   
   footerContent,   
@@ -21,8 +21,8 @@ const Card = ({
       <div className="h-full bg-white rounded-lg shadow-soft hover:shadow-hover 
         transition-all duration-300 overflow-hidden flex flex-col transform 
         group-hover:-translate-y-1">
-        {/* Header avec image */}
-        <div className="relative h-48">
+        {/* Header avec image - Maintenant cliquable */}
+        <Link to={to} className="relative block h-48">
           {image ? (
             <img 
               src={image} 
@@ -68,7 +68,7 @@ const Card = ({
               </svg>
             </button>
           )}
-        </div>
+        </Link>
 
         {/* Content */}
         <Link to={to} className="flex flex-col flex-grow p-4">
