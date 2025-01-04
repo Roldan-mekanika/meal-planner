@@ -1,11 +1,9 @@
-// src/components/common/IngredientInput/index.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const IngredientInput = ({
   ingredients,
   ingredient,
   index,
-  searchTerm,
   onSearchChange,
   onIngredientSelect,
   onQuantityChange,
@@ -16,18 +14,34 @@ const IngredientInput = ({
   units
 }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [localSearchTerm, setLocalSearchTerm] = useState('');
+  const [localQuantity, setLocalQuantity] = useState('');
+  const [localUnit, setLocalUnit] = useState('');
+
+  // Initialisation des valeurs locales lors du montage ou changement d'ingrédient
+  useEffect(() => {
+    if (ingredient.ingredient_id) {
+      const selectedIngredient = availableIngredients.find(ing => ing.id === ingredient.ingredient_id);
+      setLocalSearchTerm(selectedIngredient?.name || '');
+    } else {
+      setLocalSearchTerm('');
+    }
+    setLocalQuantity(ingredient.quantity || '');
+    setLocalUnit(ingredient.unit || '');
+  }, [ingredient, availableIngredients]);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-7 gap-2 bg-sage-50/50 rounded-lg p-2 
       group transition-colors duration-200 hover:bg-sage-50">
-      {/* Champ de recherche d'ingrédient */}
       <div className="relative sm:col-span-3">
         <input 
           type="text"
-          value={ingredient.ingredient_id 
-            ? availableIngredients.find(ing => ing.id === ingredient.ingredient_id)?.name || ''
-            : searchTerm}
-          onChange={(e) => onSearchChange(e.target.value)}
+          value={localSearchTerm}
+          onChange={(e) => {
+            const value = e.target.value;
+            setLocalSearchTerm(value);
+            onSearchChange(value);
+          }}
           onFocus={() => setIsEditing(true)}
           onBlur={() => setTimeout(() => setIsEditing(false), 200)}
           placeholder="Rechercher un ingrédient..."
@@ -35,12 +49,11 @@ const IngredientInput = ({
             focus:border-earth-500 focus:ring-earth-500 transition-shadow duration-200"
         />
 
-        {/* Menu de suggestions */}
-        {isEditing && searchTerm && searchTerm.length >= 2 && (
+        {isEditing && localSearchTerm && localSearchTerm.length >= 2 && (
           <div className="absolute z-10 w-full mt-1 bg-white rounded-lg border 
             border-sage-200 shadow-hover max-h-60 overflow-auto">
             {availableIngredients
-              .filter(ing => ing.name?.toLowerCase().includes(searchTerm.toLowerCase()))
+              .filter(ing => ing.name?.toLowerCase().includes(localSearchTerm.toLowerCase()))
               .map(ing => (
                 <button
                   key={ing.id}
@@ -56,39 +69,45 @@ const IngredientInput = ({
                 </button>
               ))}
             {!availableIngredients.some(ing => 
-              ing.name?.toLowerCase() === searchTerm.toLowerCase()
+              ing.name?.toLowerCase() === localSearchTerm.toLowerCase()
             ) && (
               <button
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  onOpenNewIngredientModal(searchTerm, index);
+                  onOpenNewIngredientModal(localSearchTerm, index);
                 }}
                 className="w-full text-left px-4 py-2 text-earth-600 hover:bg-sage-50 
                   transition-colors duration-200 border-t border-sage-200"
               >
-                + Créer "{searchTerm}"
+                + Créer "{localSearchTerm}"
               </button>
             )}
           </div>
         )}
       </div>
 
-      {/* Champ de quantité */}
       <input
         type="number"
-        value={ingredient.quantity}
-        onChange={(e) => onQuantityChange(e.target.value)}
+        value={localQuantity}
+        onChange={(e) => {
+          const value = e.target.value;
+          setLocalQuantity(value);
+          onQuantityChange(value);
+        }}
         placeholder="Quantité"
         className="w-full h-9 sm:col-span-2 rounded-lg border-sage-300 shadow-soft 
           focus:border-earth-500 focus:ring-earth-500 transition-shadow duration-200"
       />
 
-      {/* Unité et bouton supprimer */}
       <div className="flex gap-2 sm:col-span-2">
         <select
-          value={ingredient.unit || ''}
-          onChange={(e) => onUnitChange(e.target.value)}
+          value={localUnit}
+          onChange={(e) => {
+            const value = e.target.value;
+            setLocalUnit(value);
+            onUnitChange(value);
+          }}
           className="w-full h-9 rounded-lg border-sage-300 shadow-soft 
             focus:border-earth-500 focus:ring-earth-500 transition-shadow duration-200"
         >

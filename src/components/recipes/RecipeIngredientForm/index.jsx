@@ -29,28 +29,46 @@ const RecipeIngredientForm = ({
 
   // Fonction pour ajouter une ligne d'ingrédient vide en haut de la liste
   const handleAddIngredient = useCallback(() => {
+    // Créer un nouvel ingrédient complètement vide
     const emptyIngredient = {
-      ingredient_id: '',
-      quantity: '',
-      unit: ''
+      ingredient_id: '',  // ID vide
+      quantity: '',      // Quantité vide
+      unit: ''          // Unité vide
     };
-
+  
+    // Créer un nouveau searchTerm vide pour cet ingrédient
+    const newIndex = variant 
+      ? `${variantIndex}-${variant.ingredients?.length || 0}`
+      : (recipe.base_ingredients?.length || 0);
+    
+    setSearchTerms(prev => ({
+      ...prev,
+      [newIndex]: ''  // S'assurer que le term de recherche est vide
+    }));
+  
+    // Ajouter l'ingrédient vide au début du tableau
     if (variant) {
       setRecipe(prev => {
         const newVariants = [...prev.variants];
         newVariants[variantIndex] = {
           ...newVariants[variantIndex],
-          ingredients: [emptyIngredient, ...(newVariants[variantIndex].ingredients || [])]
+          ingredients: [
+            emptyIngredient,
+            ...(newVariants[variantIndex].ingredients || [])
+          ]
         };
         return { ...prev, variants: newVariants };
       });
     } else {
       setRecipe(prev => ({
         ...prev,
-        base_ingredients: [emptyIngredient, ...(prev.base_ingredients || [])]
+        base_ingredients: [
+          emptyIngredient,
+          ...(prev.base_ingredients || [])
+        ]
       }));
     }
-  }, [variant, variantIndex, setRecipe]);
+  }, [variant, variantIndex, setRecipe, setSearchTerms, recipe.base_ingredients]);
 
   // Fonction pour créer un nouvel ingrédient
   const handleCreateIngredient = async () => {
