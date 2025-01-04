@@ -1,8 +1,5 @@
 // src/components/common/IngredientInput/index.jsx
 import React, { useState } from 'react';
-import { collection, addDoc } from 'firebase/firestore';
-import { db } from '../../../config/firebase';
-import { ingredientCategories } from '../../../config/categories';
 
 const IngredientInput = ({
   ingredients,
@@ -14,43 +11,11 @@ const IngredientInput = ({
   onQuantityChange,
   onUnitChange,
   onDelete,
-  onCreateIngredient,
+  onOpenNewIngredientModal,
   availableIngredients,
   units
 }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [isAddingNewIngredient, setIsAddingNewIngredient] = useState(false);
-  const [newIngredientData, setNewIngredientData] = useState({
-    name: '',
-    category: 'legumes',
-    unit: 'g',
-    seasons: []
-  });
-
-  const handleCreateClick = async () => {
-    try {
-      const exists = availableIngredients.some(
-        ing => ing.name && ing.name.toLowerCase() === newIngredientData.name.toLowerCase()
-      );
-
-      if (exists) {
-        alert("Cet ingrédient existe déjà");
-        return;
-      }
-
-      await onCreateIngredient(newIngredientData);
-      setIsAddingNewIngredient(false);
-      setNewIngredientData({
-        name: '',
-        category: 'legumes',
-        unit: 'g',
-        seasons: []
-      });
-    } catch (error) {
-      console.error("Erreur lors de la création:", error);
-      alert("Une erreur s'est produite lors de la création de l'ingrédient");
-    }
-  };
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-7 gap-2 bg-sage-50/50 rounded-lg p-2 
@@ -97,8 +62,7 @@ const IngredientInput = ({
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  setNewIngredientData(prev => ({ ...prev, name: searchTerm }));
-                  setIsAddingNewIngredient(true);
+                  onOpenNewIngredientModal(searchTerm, index);
                 }}
                 className="w-full text-left px-4 py-2 text-earth-600 hover:bg-sage-50 
                   transition-colors duration-200 border-t border-sage-200"
@@ -145,93 +109,6 @@ const IngredientInput = ({
           </svg>
         </button>
       </div>
-
-      {/* Modal de création d'ingrédient */}
-      {isAddingNewIngredient && (
-        <div className="fixed inset-0 bg-sage-900/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-hover animate-fade-in">
-            <h3 className="text-lg font-medium text-sage-900 mb-4">
-              Créer un nouvel ingrédient
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-sage-700">
-                  Nom
-                </label>
-                <input
-                  type="text"
-                  value={newIngredientData.name}
-                  onChange={(e) => setNewIngredientData(prev => 
-                    ({ ...prev, name: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border-sage-300 shadow-soft
-                    focus:border-earth-500 focus:ring-earth-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-sage-700">
-                  Catégorie
-                </label>
-                <select
-                  value={newIngredientData.category}
-                  onChange={(e) => setNewIngredientData(prev => 
-                    ({ ...prev, category: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border-sage-300 shadow-soft
-                    focus:border-earth-500 focus:ring-earth-500"
-                >
-                  {Object.entries(ingredientCategories).map(([id, category]) => (
-                    <option key={id} value={id}>{category.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-sage-700">
-                  Unité par défaut
-                </label>
-                <select
-                  value={newIngredientData.unit}
-                  onChange={(e) => setNewIngredientData(prev => 
-                    ({ ...prev, unit: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border-sage-300 shadow-soft
-                    focus:border-earth-500 focus:ring-earth-500"
-                >
-                  <option value="">Sans unité</option>
-                  {units.map(unit => (
-                    <option key={unit.value} value={unit.value}>
-                      {unit.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAddingNewIngredient(false);
-                    setNewIngredientData({
-                      name: '',
-                      category: 'legumes',
-                      unit: 'g',
-                      seasons: []
-                    });
-                  }}
-                  className="px-4 py-2 text-sage-700 bg-sage-100 rounded-lg 
-                    hover:bg-sage-200 transition-colors duration-200"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCreateClick}
-                  className="px-4 py-2 text-white bg-earth-600 rounded-lg 
-                    hover:bg-earth-700 transition-colors duration-200"
-                >
-                  Créer
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
