@@ -3,16 +3,16 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 const Card = ({ 
-  to,               // URL de redirection
-  image,           // Source de l'image
-  title,           // Titre de la card
-  subtitle,        // Sous-titre optionnel
-  date,            // Date optionnelle
-  tags,            // Liste des tags
-  onDelete,        // Fonction de suppression
-  headerContent,   // Contenu supplémentaire dans le header
-  footerContent,   // Contenu supplémentaire dans le footer
-  children         // Contenu principal
+  to,              
+  image,           
+  title,           
+  subtitle,        
+  date,            
+  tags = [],       // Ajout d'une valeur par défaut
+  onDelete,        
+  headerContent,   
+  footerContent,   
+  children         
 }) => {
   const [showDeleteModal, setShowDeleteModal] = React.useState(false);
 
@@ -44,8 +44,7 @@ const Card = ({
                   strokeLinecap="round" 
                   strokeLinejoin="round" 
                   strokeWidth={1.5} 
-                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 
-                    0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" 
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" 
                 />
               </svg>
             </div>

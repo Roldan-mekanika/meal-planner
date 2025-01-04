@@ -1,15 +1,25 @@
 // src/components/recipes/RecipeCard/index.jsx
 import React from 'react';
 import Card from '../../common/Card';
+import { tagCategories } from '../../../config/categories';
 
 const RecipeCard = ({ recipe, tags, onDelete }) => {
-  const totalTime = parseInt(recipe.preparation_time) + parseInt(recipe.cooking_time);
+  const totalTime = parseInt(recipe.preparation_time || 0) + parseInt(recipe.cooking_time || 0);
   
   // Formater les tags pour le composant Card
-  const formattedTags = recipe.tags?.slice(0, 3).map(tagId => {
-    const tag = tags.find(t => t.id === tagId);
-    return tag ? tag.name : null;
-  }).filter(Boolean);
+  const formattedTags = React.useMemo(() => {
+    if (!recipe.tags || !Array.isArray(recipe.tags)) return [];
+
+    return recipe.tags
+      .slice(0, 3)
+      .map(tagId => {
+        const tag = tags.find(t => t.id === tagId);
+        if (!tag) return null;
+        return tag.name;
+      })
+      .filter(Boolean);
+
+  }, [recipe.tags, tags]);
 
   // Si il y a plus de 3 tags, ajouter un indicateur
   if (recipe.tags?.length > 3) {
@@ -20,12 +30,11 @@ const RecipeCard = ({ recipe, tags, onDelete }) => {
     <Card
       to={`/recipes/${recipe.id}`}
       image={recipe.image_url}
-      title={recipe.title}
+      title={recipe.title || 'Sans titre'}
       tags={formattedTags}
       onDelete={() => onDelete(recipe.id)}
       headerContent={(
-        <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t 
-          from-black/50 to-transparent">
+        <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/50 to-transparent">
           <div className="flex items-center text-sm text-white">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" 
               fill="none" viewBox="0 0 24 24" stroke="currentColor">
