@@ -1,3 +1,4 @@
+// src/pages/Planning/ShoppingList.jsx
 import React, { useState, useEffect } from 'react';
 import { usePlanning } from '../../contexts/PlanningContext';
 import { ingredientCategories } from '../../config/categories';
@@ -9,70 +10,98 @@ const ShoppingList = () => {
   const [ingredients, setIngredients] = useState({});
   const [loading, setLoading] = useState(true);
   const { weeklyPlan, currentWeek } = usePlanning();
-  const [selectedWeek, setSelectedWeek] = useState(currentWeek);
 
   useEffect(() => {
     generateList();
-  }, [weeklyPlan, selectedWeek]);
+  }, [weeklyPlan, currentWeek]);
+
+  const calculateAdjustedQuantity = (quantity, originalServings, targetServings) => {
+    if (!quantity || !originalServings || !targetServings) return quantity;
+    return (quantity * targetServings) / originalServings;
+  };
 
   const generateList = async () => {
     setLoading(true);
     try {
-      // Gather all recipe IDs from the weekly plan
       const recipeIds = new Set();
+      // Collecter tous les ID de recettes et leurs portions
+      const recipesWithServings = [];
       Object.values(weeklyPlan || {}).forEach(day => {
-        if (day.lunch?.recipeId) recipeIds.add(day.lunch.recipeId);
-        if (day.dinner?.recipeId) recipeIds.add(day.dinner.recipeId);
+        ['lunch', 'dinner'].forEach(mealType => {
+          const meal = day[mealType];
+          if (meal?.recipeId) {
+            recipeIds.add(meal.recipeId);
+            recipesWithServings.push({
+              recipeId: meal.recipeId,
+              variantIndex: meal.variantIndex,
+              servings: meal.servings || 4
+            });
+          }
+        });
       });
 
-      // Load recipes and their ingredients
+      // Charger toutes les recettes
       const recipes = await Promise.all(
         Array.from(recipeIds).map(id => getDoc(doc(db, 'recipes', id)))
       );
 
-      // Aggregate ingredients
+      // Agréger les ingrédients
       const ingredientMap = {};
       
       for (const recipeDoc of recipes) {
         if (!recipeDoc.exists()) continue;
-        
         const recipe = recipeDoc.data();
         
-        // Trouver toutes les occurrences de cette recette dans le planning
-        for (const day of Object.values(weeklyPlan)) {
-          for (const mealType of ['lunch', 'dinner']) {
-            const meal = day[mealType];
-            if (meal?.recipeId === recipeDoc.id) {
-              // Utiliser les ingrédients de base ou du variant selon le cas
-              const ingredients = meal.variantIndex !== null && recipe.variants?.[meal.variantIndex]
-                ? recipe.variants[meal.variantIndex].ingredients
-                : recipe.base_ingredients;
+        // Trouver toutes les utilisations de cette recette
+        for (const mealInfo of recipesWithServings) {
+          if (mealInfo.recipeId === recipeDoc.id) {
+            // Utiliser la base ou la variante selon le cas
+            const ingredients = mealInfo.variantIndex !== null && recipe.variants?.[mealInfo.variantIndex]
+              ? recipe.variants[mealInfo.variantIndex].ingredients
+              : recipe.base_ingredients;
 
-              for (const ing of ingredients) {
-                if (!ingredientMap[ing.ingredient_id]) {
-                  const ingDoc = await getDoc(doc(db, 'ingredients', ing.ingredient_id));
-                  if (!ingDoc.exists()) continue;
-                  
-                  ingredientMap[ing.ingredient_id] = {
-                    ...ingDoc.data(),
-                    quantity: parseFloat(ing.quantity) || 0,
-                    unit: ing.unit,
-                    recipes: [recipe.title + (meal.variantIndex !== null ? ` (${recipe.variants[meal.variantIndex].name})` : '')]
-                  };
-                } else {
-                  ingredientMap[ing.ingredient_id].quantity += parseFloat(ing.quantity) || 0;
-                  const recipeTitle = recipe.title + (meal.variantIndex !== null ? ` (${recipe.variants[meal.variantIndex].name})` : '');
-                  if (!ingredientMap[ing.ingredient_id].recipes.includes(recipeTitle)) {
-                    ingredientMap[ing.ingredient_id].recipes.push(recipeTitle);
-                  }
-                }
+            for (const ing of ingredients) {
+              if (!ing.ingredient_id) continue;
+
+              // Charger les détails de l'ingrédient s'il n'existe pas encore dans la map
+              if (!ingredientMap[ing.ingredient_id]) {
+                const ingDoc = await getDoc(doc(db, 'ingredients', ing.ingredient_id));
+                if (!ingDoc.exists()) continue;
+
+                ingredientMap[ing.ingredient_id] = {
+                  ...ingDoc.data(),
+                  quantity: 0,
+                  unit: ing.unit,
+                  recipes: []
+                };
+              }
+
+              // Calculer la quantité ajustée selon le nombre de portions
+              const adjustedQuantity = calculateAdjustedQuantity(
+                parseFloat(ing.quantity) || 0,
+                recipe.servings,
+                mealInfo.servings
+              );
+
+              // Mettre à jour la quantité totale
+              ingredientMap[ing.ingredient_id].quantity += adjustedQuantity;
+
+              // Ajouter la recette à la liste si elle n'y est pas déjà
+              const recipeTitle = recipe.title + 
+                (mealInfo.variantIndex !== null 
+                  ? ` (${recipe.variants[mealInfo.variantIndex].name})` 
+                  : '');
+              if (!ingredientMap[ing.ingredient_id].recipes.includes(recipeTitle)) {
+                ingredientMap[ing.ingredient_id].recipes.push(
+                  `${recipeTitle} (${mealInfo.servings} portions)`
+                );
               }
             }
           }
         }
       }
 
-      // Group by category
+      // Grouper par catégorie
       const categorized = {};
       Object.entries(ingredientMap).forEach(([id, ingredient]) => {
         const category = ingredient.category || 'other';
@@ -93,7 +122,9 @@ const ShoppingList = () => {
       .map(([category, items]) => {
         const categoryName = ingredientCategories[category]?.label || category;
         const itemsList = items
-          .map(item => `${item.quantity} ${item.unit} ${item.name}`)
+          .map(item => 
+            `${item.quantity} ${item.unit} ${item.name} (${item.recipes.join(', ')})`
+          )
           .join('\n');
         return `${categoryName}:\n${itemsList}`;
       })
@@ -116,7 +147,6 @@ const ShoppingList = () => {
     const lineHeight = 7;
 
     Object.entries(ingredients).forEach(([category, items]) => {
-      // Add new page if not enough space
       if (yOffset > 250) {
         doc.addPage();
         yOffset = 20;
@@ -129,7 +159,6 @@ const ShoppingList = () => {
 
       doc.setFontSize(12);
       items.forEach(item => {
-        // Add new page if not enough space
         if (yOffset > 270) {
           doc.addPage();
           yOffset = 20;
@@ -138,7 +167,6 @@ const ShoppingList = () => {
         const itemText = `${item.quantity} ${item.unit} ${item.name}`;
         doc.text(itemText, margin + 5, yOffset);
         
-        // Add recipes in smaller font and gray
         doc.setFontSize(8);
         doc.setTextColor(100);
         item.recipes.forEach(recipe => {
@@ -207,14 +235,16 @@ const ShoppingList = () => {
                 <div key={item.id} className="px-6 py-4 hover:bg-sage-50 transition-colors duration-200">
                   <div className="flex justify-between items-start">
                     <div>
-                      <span className="text-sage-900 font-medium">{item.name}</span>
+                      <div className="text-sage-900 font-medium flex items-baseline gap-2">
+                        <span>{item.name}</span>
+                        <span className="text-sage-600">
+                          {Math.round(item.quantity * 100) / 100} {item.unit}
+                        </span>
+                      </div>
                       <p className="text-sm text-sage-600 mt-1">
-                        Utilisé dans : {item.recipes.join(', ')}
+                        Pour : {item.recipes.join(', ')}
                       </p>
                     </div>
-                    <span className="text-sage-700 font-medium whitespace-nowrap">
-                      {item.quantity} {item.unit}
-                    </span>
                   </div>
                 </div>
               ))}
