@@ -2,13 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, addDoc } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL, connectStorageEmulator } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
-import { tagCategories, ingredientCategories } from '../../config/categories';
-import RecipeEditor from '../../components/common/RecipeEditor/index.jsx';
-import IngredientInput from '../../components/common/IngredientInput/index.jsx';
+import { tagCategories } from '../../config/categories';
+import RecipeEditor from '../../components/common/RecipeEditor';
 import RecipeIngredientForm from '../../components/recipes/RecipeIngredientForm';
-import { processImage, validateRecipe, formatErrorMessage } from '../../utils/imageProcessor';
+import { processImage } from '../../utils/imageProcessor';
 
 const CreateRecipe = () => {
   const navigate = useNavigate();
@@ -19,13 +18,7 @@ const CreateRecipe = () => {
   const [image, setImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [searchTerms, setSearchTerms] = useState({});
-  const [isAddingNewIngredient, setIsAddingNewIngredient] = useState(false);
   const [editingIngredientIndex, setEditingIngredientIndex] = useState(null);
-  const [newIngredientData, setNewIngredientData] = useState({
-    name: '',
-    category: 'legumes',
-    unit: 'g'
-  });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [recipe, setRecipe] = useState({
@@ -34,11 +27,44 @@ const CreateRecipe = () => {
     cooking_time: '',
     servings: 4,
     tags: [],
-    base_ingredients: [],
+    base_ingredients: [], // Initialize as empty array
     instructions: '',
     variants: [],
     hasVariants: false
   });
+
+  // Premier useEffect pour charger les données
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [tagsSnapshot, ingredientsSnapshot] = await Promise.all([
+          getDocs(collection(db, 'tags')),
+          getDocs(collection(db, 'ingredients'))
+        ]);
+
+        setAvailableTags(tagsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })));
+
+        setAvailableIngredients(ingredientsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })));
+      } catch (error) {
+        console.error("Erreur lors du chargement des données:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Deuxième useEffect pour le debug
+  useEffect(() => {
+    console.log('État actuel de recipe:', recipe);
+  }, [recipe]);
 
   const units = [
     { value: 'g', label: 'Grammes (g)' },
@@ -49,33 +75,6 @@ const CreateRecipe = () => {
     { value: 'cas', label: 'Cuillère à soupe' },
     { value: 'cac', label: 'Cuillère à café' },
   ];
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    try {
-      const [tagsSnapshot, ingredientsSnapshot] = await Promise.all([
-        getDocs(collection(db, 'tags')),
-        getDocs(collection(db, 'ingredients'))
-      ]);
-
-      setAvailableTags(tagsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })));
-
-      setAvailableIngredients(ingredientsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })));
-    } catch (error) {
-      console.error("Erreur lors du chargement des données:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleImageChange = async (e) => {
     const file = e.target.files[0];
@@ -90,107 +89,6 @@ const CreateRecipe = () => {
     }
   };
 
-  const handleAddIngredient = () => {
-    setRecipe(prev => ({
-      ...prev,
-      base_ingredients: [
-        ...prev.base_ingredients,
-        { ingredient_id: '', quantity: '', unit: '' }
-      ]
-    }));
-  };
-
-  const handleIngredientSelect = (index, ingredientId, variantIndex = null) => {
-    const selectedIngredient = availableIngredients.find(ing => ing.id === ingredientId);
-    if (selectedIngredient) {
-      setRecipe(prev => {
-        if (variantIndex === null) {
-          // Update base ingredients
-          const newIngredients = [...prev.base_ingredients];
-          newIngredients[index] = {
-            ...newIngredients[index],
-            ingredient_id: ingredientId,
-            unit: selectedIngredient.unit
-          };
-          return { ...prev, base_ingredients: newIngredients };
-        } else {
-          // Update variant ingredients
-          const newVariants = [...prev.variants];
-          newVariants[variantIndex].ingredients[index] = {
-            ...newVariants[variantIndex].ingredients[index],
-            ingredient_id: ingredientId,
-            unit: selectedIngredient.unit
-          };
-          return { ...prev, variants: newVariants };
-        }
-      });
-    }
-  };
-
-  const handleCreateNewIngredient = async (context = { type: 'base' }) => {
-    try {
-      const exists = availableIngredients.some(
-        ing => ing.name.toLowerCase() === newIngredientData.name.toLowerCase()
-      );
-
-      if (exists) {
-        alert("Cet ingrédient existe déjà");
-        return;
-      }
-
-      const docRef = await addDoc(collection(db, 'ingredients'), newIngredientData);
-      const newIngredient = {
-        id: docRef.id,
-        ...newIngredientData
-      };
-      
-      setAvailableIngredients(prev => [...prev, newIngredient]);
-
-      if (context.type === 'variant') {
-        // Si nous sommes dans une variante
-        setRecipe(prev => {
-          const newVariants = [...prev.variants];
-          newVariants[context.variantIndex].ingredients.push({
-            ingredient_id: docRef.id,
-            quantity: '',
-            unit: newIngredientData.unit
-          });
-          return { ...prev, variants: newVariants };
-        });
-        
-        const newIngredientIndex = recipe.variants[context.variantIndex].ingredients.length;
-        setSearchTerms(prev => ({
-          ...prev,
-          [`${context.variantIndex}-${newIngredientIndex}`]: newIngredientData.name
-        }));
-      } else {
-        // Si nous sommes dans les ingrédients de base
-        setRecipe(prev => ({
-          ...prev,
-          base_ingredients: [
-            ...prev.base_ingredients,
-            {
-              ingredient_id: docRef.id,
-              quantity: '',
-              unit: newIngredientData.unit
-            }
-          ]
-        }));
-        
-        setSearchTerms(prev => ({
-          ...prev,
-          [recipe.base_ingredients.length]: newIngredientData.name
-        }));
-      }
-      
-      setIsAddingNewIngredient(false);
-      setNewIngredientData({ name: '', category: 'legumes', unit: 'g' });
-    } catch (error) {
-      console.error("Erreur lors de la création de l'ingrédient:", error);
-      alert("Une erreur s'est produite lors de la création de l'ingrédient");
-    }
-  };
-
   const handleAddVariant = () => {
     setRecipe(prev => ({
       ...prev,
@@ -198,9 +96,7 @@ const CreateRecipe = () => {
         ...prev.variants,
         {
           name: '',
-          ingredients: prev.base_ingredients.map(ingredient => ({
-            ...ingredient
-          })),
+          ingredients: [...prev.base_ingredients.map(ingredient => ({...ingredient}))],
           instructions: prev.instructions,
           preparation_time: prev.preparation_time,
           cooking_time: prev.cooking_time
@@ -212,9 +108,9 @@ const CreateRecipe = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-  
+
     try {
-      let imageUrl = recipe.image_url || ''; // Pour EditRecipe
+      let imageUrl = '';
       if (image) {
         try {
           const storageRef = ref(storage, `recipe-images/${Date.now()}-${image.name}`);
@@ -225,22 +121,18 @@ const CreateRecipe = () => {
           throw new Error("Erreur lors de l'upload de l'image");
         }
       }
-  
+
       const recipeData = {
         ...recipe,
         image_url: imageUrl,
         preparation_time: parseInt(recipe.preparation_time),
         cooking_time: parseInt(recipe.cooking_time),
         variants: recipe.hasVariants ? recipe.variants : [],
-        created_at: new Date() // ou updated_at pour EditRecipe
+        created_at: new Date()
       };
-  
-      // Pour CreateRecipe :
+
       await addDoc(collection(db, 'recipes'), recipeData);
-      // OU pour EditRecipe :
-      // await updateDoc(doc(db, 'recipes', id), recipeData);
-  
-      alert('Recette enregistrée avec succès !');
+      alert('Recette créée avec succès !');
       navigate('/recipes');
     } catch (error) {
       console.error("Erreur:", error);
@@ -292,8 +184,8 @@ const CreateRecipe = () => {
                 value={recipe.title}
                 onChange={(e) => setRecipe(prev => ({ ...prev, title: e.target.value }))}
                 className="w-full rounded-lg border-sage-300 shadow-soft
-                  focus:border-earth-500 focus:ring-earth-500 transition-shadow
-                  duration-200 placeholder-sage-400"
+                  focus:border-earth-500 focus:ring-earth-500 transition-shadow duration-200"
+                placeholder="Nom de votre recette"
                 required
               />
             </div>
@@ -388,6 +280,7 @@ const CreateRecipe = () => {
             </div>
           </div>
         </div>
+
         {/* Tags Categories Section */}
         <div className="bg-white rounded-lg shadow-soft p-6">
           <h2 className="text-xl font-semibold text-sage-900 mb-6">
@@ -466,27 +359,8 @@ const CreateRecipe = () => {
         )}
 
         {/* Base Ingredients Section */}
-        <div className="flex justify-between items-center mb-6">
-  <h2 className="text-xl font-semibold text-sage-900">
-    Ingrédients de base
-  </h2>
-  <button
-    type="button"
-    onClick={handleAddIngredient}
-    className="inline-flex items-center px-4 py-2 bg-earth-600 text-white 
-      rounded-lg hover:bg-earth-700 transition-colors duration-200 group"
-  >
-    <svg className="w-5 h-5 mr-2 transition-transform duration-200 group-hover:scale-110" 
-      fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-        d="M12 4v16m8-8H4" />
-    </svg>
-    Ajouter un ingrédient
-  </button>
-</div>
-
-<RecipeIngredientForm
-  ingredients={recipe.base_ingredients}
+        <RecipeIngredientForm
+  ingredients={recipe.base_ingredients || []} // Ajout du fallback à un tableau vide
   searchTerms={searchTerms}
   setSearchTerms={setSearchTerms}
   editingIngredientIndex={editingIngredientIndex}
@@ -497,6 +371,7 @@ const CreateRecipe = () => {
   setAvailableIngredients={setAvailableIngredients}
   units={units}
 />
+
         {/* Base Instructions Section */}
         <div className="bg-white rounded-lg shadow-soft p-6">
           <h2 className="text-xl font-semibold text-sage-900 mb-6">
@@ -535,8 +410,8 @@ const CreateRecipe = () => {
                 <button
                   type="button"
                   onClick={handleAddVariant}
-                  className="inline-flex items-center px-4 py-2 bg-earth-600 
-                    text-white rounded-lg hover:bg-earth-700 transition-colors duration-200"
+                  className="inline-flex items-center px-4 py-2 bg-earth-600 text-white 
+                    rounded-lg hover:bg-earth-700 transition-colors duration-200"
                 >
                   <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" 
                     stroke="currentColor">
@@ -573,7 +448,8 @@ const CreateRecipe = () => {
                       .filter((_, i) => i !== variantIndex);
                     setRecipe(prev => ({ ...prev, variants: newVariants }));
                   }}
-                  className="ml-4 p-2 text-sage-400 hover:text-red-500 transition-colors duration-200"
+                  className="ml-4 p-2 text-sage-400 hover:text-red-500 
+                    transition-colors duration-200"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" 
                     stroke="currentColor">
@@ -623,52 +499,23 @@ const CreateRecipe = () => {
               </div>
 
               {/* Variant Ingredients */}
-              <div className="mb-6">
-  <div className="flex justify-between items-center mb-4">
-    <h3 className="text-lg font-medium text-sage-700">
-      Ingrédients spécifiques
-    </h3>
-    <button
-      type="button"
-      onClick={() => {
-        const newVariants = [...recipe.variants];
-        newVariants[variantIndex].ingredients.push({
-          ingredient_id: '',
-          quantity: '',
-          unit: ''
-        });
-        setRecipe(prev => ({ ...prev, variants: newVariants }));
-      }}
-      className="inline-flex items-center px-4 py-2 bg-earth-600 text-white 
-        rounded-lg hover:bg-earth-700 transition-colors duration-200 group"
-    >
-      <svg className="w-5 h-5 mr-2 transition-transform duration-200 group-hover:scale-110" 
-        fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-          d="M12 4v16m8-8H4" />
-      </svg>
-      Ajouter un ingrédient
-    </button>
-  </div>
-
-  <RecipeIngredientForm
-    ingredients={variant.ingredients}
-    searchTerms={searchTerms}
-    setSearchTerms={setSearchTerms}
-    editingIngredientIndex={editingIngredientIndex}
-    setEditingIngredientIndex={setEditingIngredientIndex}
-    recipe={recipe}
-    setRecipe={setRecipe}
-    availableIngredients={availableIngredients}
-    setAvailableIngredients={setAvailableIngredients}
-    units={units}
-    variant={variant}
-    variantIndex={variantIndex}
-  />
-</div>
+              <RecipeIngredientForm
+                ingredients={variant.ingredients}
+                searchTerms={searchTerms}
+                setSearchTerms={setSearchTerms}
+                editingIngredientIndex={editingIngredientIndex}
+                setEditingIngredientIndex={setEditingIngredientIndex}
+                recipe={recipe}
+                setRecipe={setRecipe}
+                availableIngredients={availableIngredients}
+                setAvailableIngredients={setAvailableIngredients}
+                units={units}
+                variant={variant}
+                variantIndex={variantIndex}
+              />
 
               {/* Variant Instructions */}
-              <div>
+              <div className="mt-6">
                 <h3 className="text-lg font-medium text-sage-700 mb-4">
                   Instructions spécifiques
                 </h3>
@@ -687,117 +534,38 @@ const CreateRecipe = () => {
 
         {/* Form Actions */}
         <div className="flex justify-end gap-4">
-  <button
-    type="button"
-    onClick={() => navigate('/recipes')}
-    disabled={isSubmitting}
-    className="px-4 py-2 text-sage-700 bg-sage-100 rounded-lg 
-      hover:bg-sage-200 transition-colors duration-200"
-  >
-    Annuler
-  </button>
-  <button
-    type="submit"
-    disabled={isSubmitting}
-    className="px-4 py-2 text-white bg-earth-600 rounded-lg 
-      hover:bg-earth-700 transition-colors duration-200 
-      disabled:opacity-50 disabled:cursor-not-allowed"
-  >
-    {isSubmitting ? (
-      <div className="flex items-center">
-        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" 
-          xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" 
-            strokeWidth="4"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 
-            0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 
-            7.938l3-2.647z"></path>
-        </svg>
-        Création en cours...
-      </div>
-    ) : 'Créer la recette'}
-  </button>
-</div>
-      </form>
-
-      {/* New Ingredient Modal */}
-      {isAddingNewIngredient && (
-        <div className="fixed inset-0 bg-sage-900/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-hover animate-fade-in">
-            <h3 className="text-lg font-medium text-sage-900 mb-4">
-              Créer un nouvel ingrédient
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-sage-700">
-                  Nom
-                </label>
-                <input
-                  type="text"
-                  value={newIngredientData.name}
-                  onChange={(e) => setNewIngredientData(prev => 
-                    ({ ...prev, name: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border-sage-300 shadow-soft
-                    focus:border-earth-500 focus:ring-earth-500"
-                />
+          <button
+            type="button"
+            onClick={() => navigate('/recipes')}
+            disabled={isSubmitting}
+            className="px-4 py-2 text-sage-700 bg-sage-100 rounded-lg 
+              hover:bg-sage-200 transition-colors duration-200"
+          >
+            Annuler
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="px-4 py-2 text-white bg-earth-600 rounded-lg 
+              hover:bg-earth-700 transition-colors duration-200 
+              disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? (
+              <div className="flex items-center">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" 
+                  xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" 
+                    strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 
+                    0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 
+                    7.938l3-2.647z"></path>
+                </svg>
+                Création en cours...
               </div>
-              <div>
-                <label className="block text-sm font-medium text-sage-700">
-                  Catégorie
-                </label>
-                <select
-                  value={newIngredientData.category}
-                  onChange={(e) => setNewIngredientData(prev => 
-                    ({ ...prev, category: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border-sage-300 shadow-soft
-                    focus:border-earth-500 focus:ring-earth-500"
-                >
-                  {Object.entries(ingredientCategories).map(([id, category]) => (
-                    <option key={id} value={id}>{category.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-sage-700">
-                  Unité par défaut
-                </label>
-                <select
-                  value={newIngredientData.unit}
-                  onChange={(e) => setNewIngredientData(prev => 
-                    ({ ...prev, unit: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border-sage-300 shadow-soft
-                    focus:border-earth-500 focus:ring-earth-500"
-                >
-                  <option value="">Sans unité</option>
-                  {units.map(unit => (
-                    <option key={unit.value} value={unit.value}>
-                      {unit.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setIsAddingNewIngredient(false)}
-                  className="px-4 py-2 text-sage-700 bg-sage-100 rounded-lg 
-                    hover:bg-sage-200 transition-colors duration-200"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCreateNewIngredient}
-                  className="px-4 py-2 text-white bg-earth-600 rounded-lg 
-                    hover:bg-earth-700 transition-colors duration-200"
-                >
-                  Créer
-                </button>
-              </div>
-            </div>
-          </div>
+            ) : 'Créer la recette'}
+          </button>
         </div>
-      )}
+      </form>
     </div>
   );
 };

@@ -1,109 +1,123 @@
 // src/components/recipes/RecipeIngredientForm/index.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import { ingredientCategories } from '../../../config/categories';
 import IngredientInput from '../../common/IngredientInput';
+import Modal from '../../common/Modal';
+import SeasonSelector from '../../../components/common/SeasonSelector';
 
 const RecipeIngredientForm = ({
-  ingredients,
-  searchTerms,
-  setSearchTerms,
-  editingIngredientIndex,
-  setEditingIngredientIndex,
   recipe,
   setRecipe,
+  searchTerms,
+  setSearchTerms,
   availableIngredients,
   setAvailableIngredients,
   units,
   variant = null,
   variantIndex = null
 }) => {
-  const [currentIngredientIndex, setCurrentIngredientIndex] = useState(null);
+  const [isAddingNewIngredient, setIsAddingNewIngredient] = useState(false);
+  const [newIngredientData, setNewIngredientData] = useState({
+    name: '',
+    category: 'legumes',
+    unit: 'g',
+    seasons: []
+  });
+  const [currentEditingIndex, setCurrentEditingIndex] = useState(null);
 
-  // Regrouper les ingrédients par catégorie
-  const groupedIngredients = useMemo(() => {
-    return ingredients.reduce((acc, ingredient, index) => {
-      const ingredientDetails = availableIngredients.find(i => i.id === ingredient.ingredient_id);
-      if (!ingredientDetails) return acc;
-
-      const category = ingredientDetails.category;
-      if (!acc[category]) {
-        acc[category] = [];
-      }
-      acc[category].push({ ...ingredient, index });
-      return acc;
-    }, {});
-  }, [ingredients, availableIngredients]);
-
-  // Fonction pour créer un nouvel ingrédient
-  const handleCreateIngredient = async (ingredientData) => {
-    try {
-      // Créer l'ingrédient dans Firebase
-      const docRef = await addDoc(collection(db, 'ingredients'), ingredientData);
-      
-      // Ajouter le nouvel ingrédient à la liste des ingrédients disponibles
-      const newIngredient = {
-        id: docRef.id,
-        ...ingredientData
-      };
-      setAvailableIngredients(prev => [...prev, newIngredient]);
-
-      // Mettre à jour l'ingrédient actuel avec le nouvel ID
-      if (variant) {
-        const newVariants = [...recipe.variants];
-        newVariants[variantIndex].ingredients[currentIngredientIndex] = {
-          ingredient_id: docRef.id,
-          quantity: '',
-          unit: ingredientData.unit
-        };
-        setRecipe(prev => ({ ...prev, variants: newVariants }));
-      } else {
-        const newIngredients = [...recipe.base_ingredients];
-        newIngredients[currentIngredientIndex] = {
-          ingredient_id: docRef.id,
-          quantity: '',
-          unit: ingredientData.unit
-        };
-        setRecipe(prev => ({ ...prev, base_ingredients: newIngredients }));
-      }
-
-      // Mettre à jour les termes de recherche
-      setSearchTerms(prev => ({
-        ...prev,
-        [variant ? `${variantIndex}-${currentIngredientIndex}` : currentIngredientIndex]: ingredientData.name
-      }));
-
-      return newIngredient;
-    } catch (error) {
-      console.error("Erreur lors de la création de l'ingrédient:", error);
-      throw error;
-    }
-  };
-
-  // Fonction pour ajouter un nouvel ingrédient à la recette
-  const handleAddIngredient = () => {
-    const newIngredient = {
+  // Fonction pour ajouter une ligne d'ingrédient vide en haut de la liste
+  const handleAddIngredient = useCallback(() => {
+    const emptyIngredient = {
       ingredient_id: '',
       quantity: '',
       unit: ''
     };
 
     if (variant) {
-      const newVariants = [...recipe.variants];
-      newVariants[variantIndex].ingredients.unshift(newIngredient);
-      setRecipe(prev => ({ ...prev, variants: newVariants }));
+      setRecipe(prev => {
+        const newVariants = [...prev.variants];
+        newVariants[variantIndex] = {
+          ...newVariants[variantIndex],
+          ingredients: [emptyIngredient, ...(newVariants[variantIndex].ingredients || [])]
+        };
+        return { ...prev, variants: newVariants };
+      });
     } else {
       setRecipe(prev => ({
         ...prev,
-        base_ingredients: [newIngredient, ...prev.base_ingredients]
+        base_ingredients: [emptyIngredient, ...(prev.base_ingredients || [])]
       }));
     }
+  }, [variant, variantIndex, setRecipe]);
+
+  // Fonction pour créer un nouvel ingrédient
+  const handleCreateIngredient = async () => {
+    try {
+      const exists = availableIngredients.some(
+        ing => ing.name?.toLowerCase() === newIngredientData.name.toLowerCase()
+      );
+
+      if (exists) {
+        alert("Cet ingrédient existe déjà");
+        return;
+      }
+
+      const docRef = await addDoc(collection(db, 'ingredients'), newIngredientData);
+      
+      const newIngredient = {
+        id: docRef.id,
+        ...newIngredientData
+      };
+      
+      setAvailableIngredients(prev => [...prev, newIngredient]);
+
+      // Mettre à jour la ligne d'ingrédient en cours
+      if (variant) {
+        setRecipe(prev => {
+          const newVariants = [...prev.variants];
+          newVariants[variantIndex].ingredients[currentEditingIndex] = {
+            ingredient_id: docRef.id,
+            quantity: '',
+            unit: newIngredientData.unit
+          };
+          return { ...prev, variants: newVariants };
+        });
+      } else {
+        setRecipe(prev => {
+          const newIngredients = [...prev.base_ingredients];
+          newIngredients[currentEditingIndex] = {
+            ingredient_id: docRef.id,
+            quantity: '',
+            unit: newIngredientData.unit
+          };
+          return { ...prev, base_ingredients: newIngredients };
+        });
+      }
+
+      // Réinitialiser le formulaire
+      setIsAddingNewIngredient(false);
+      setNewIngredientData({
+        name: '',
+        category: 'legumes',
+        unit: 'g',
+        seasons: []
+      });
+      setCurrentEditingIndex(null);
+    } catch (error) {
+      console.error("Erreur lors de la création de l'ingrédient:", error);
+      alert("Une erreur s'est produite lors de la création de l'ingrédient");
+    }
   };
+  // Récupérer les ingrédients actuels selon le contexte (base ou variante)
+  const currentIngredients = variant 
+    ? variant.ingredients || [] 
+    : recipe.base_ingredients || [];
 
   return (
     <div className="space-y-6">
-      {/* Section d'ajout d'ingrédient */}
+      {/* En-tête avec bouton d'ajout */}
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-medium text-sage-900">
           {variant ? 'Ingrédients de la variante' : 'Ingrédients'}
@@ -111,13 +125,11 @@ const RecipeIngredientForm = ({
         <button
           type="button"
           onClick={handleAddIngredient}
-          className="inline-flex items-center px-4 py-2 bg-earth-600 text-white rounded-lg 
-            hover:bg-earth-700 transition-colors duration-200 group shadow-sm"
+          className="inline-flex items-center px-4 py-2 bg-earth-600 text-white 
+            rounded-lg hover:bg-earth-700 transition-colors duration-200 group shadow-sm"
         >
-          <svg 
-            className="w-5 h-5 mr-2 transition-transform duration-200 group-hover:scale-110" 
-            fill="none" viewBox="0 0 24 24" stroke="currentColor"
-          >
+          <svg className="w-5 h-5 mr-2 transition-transform duration-200 group-hover:scale-110" 
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
               d="M12 4v16m8-8H4" />
           </svg>
@@ -125,108 +137,209 @@ const RecipeIngredientForm = ({
         </button>
       </div>
 
-      {/* Liste des ingrédients groupés par catégorie */}
-      {Object.entries(ingredientCategories).map(([categoryId, category]) => {
-        const categoryIngredients = groupedIngredients[categoryId] || [];
-        if (categoryIngredients.length === 0) return null;
+      {/* Liste des ingrédients */}
+      <div className="space-y-2">
+        {currentIngredients.map((ingredient, index) => (
+          <IngredientInput
+            key={index}
+            ingredient={ingredient}
+            index={index}
+            searchTerm={searchTerms[variant ? `${variantIndex}-${index}` : index] || ''}
+            onSearchChange={(value) => {
+              setSearchTerms(prev => ({
+                ...prev,
+                [variant ? `${variantIndex}-${index}` : index]: value
+              }));
+            }}
+            onIngredientSelect={(ingredientId) => {
+              const selectedIngredient = availableIngredients.find(ing => ing.id === ingredientId);
+              if (selectedIngredient) {
+                if (variant) {
+                  setRecipe(prev => {
+                    const newVariants = [...prev.variants];
+                    newVariants[variantIndex].ingredients[index] = {
+                      ...newVariants[variantIndex].ingredients[index],
+                      ingredient_id: ingredientId,
+                      unit: selectedIngredient.unit
+                    };
+                    return { ...prev, variants: newVariants };
+                  });
+                } else {
+                  setRecipe(prev => {
+                    const newIngredients = [...prev.base_ingredients];
+                    newIngredients[index] = {
+                      ...newIngredients[index],
+                      ingredient_id: ingredientId,
+                      unit: selectedIngredient.unit
+                    };
+                    return { ...prev, base_ingredients: newIngredients };
+                  });
+                }
+              }
+            }}
+            onQuantityChange={(value) => {
+              if (variant) {
+                setRecipe(prev => {
+                  const newVariants = [...prev.variants];
+                  newVariants[variantIndex].ingredients[index].quantity = value;
+                  return { ...prev, variants: newVariants };
+                });
+              } else {
+                setRecipe(prev => {
+                  const newIngredients = [...prev.base_ingredients];
+                  newIngredients[index].quantity = value;
+                  return { ...prev, base_ingredients: newIngredients };
+                });
+              }
+            }}
+            onUnitChange={(value) => {
+              if (variant) {
+                setRecipe(prev => {
+                  const newVariants = [...prev.variants];
+                  newVariants[variantIndex].ingredients[index].unit = value;
+                  return { ...prev, variants: newVariants };
+                });
+              } else {
+                setRecipe(prev => {
+                  const newIngredients = [...prev.base_ingredients];
+                  newIngredients[index].unit = value;
+                  return { ...prev, base_ingredients: newIngredients };
+                });
+              }
+            }}
+            onDelete={() => {
+              if (variant) {
+                setRecipe(prev => {
+                  const newVariants = [...prev.variants];
+                  newVariants[variantIndex].ingredients = newVariants[variantIndex].ingredients
+                    .filter((_, i) => i !== index);
+                  return { ...prev, variants: newVariants };
+                });
+              } else {
+                setRecipe(prev => {
+                  const newIngredients = prev.base_ingredients.filter((_, i) => i !== index);
+                  return { ...prev, base_ingredients: newIngredients };
+                });
+              }
+              const searchKey = variant ? `${variantIndex}-${index}` : index;
+              const newSearchTerms = { ...searchTerms };
+              delete newSearchTerms[searchKey];
+              setSearchTerms(newSearchTerms);
+            }}
+            onOpenNewIngredientModal={(searchValue, index) => {
+              setNewIngredientData(prev => ({
+                ...prev,
+                name: searchValue
+              }));
+              setCurrentEditingIndex(index);
+              setIsAddingNewIngredient(true);
+            }}
+            availableIngredients={availableIngredients}
+            units={units}
+          />
+        ))}
+      </div>
 
-        return (
-          <div key={categoryId} className="space-y-2">
-            <h4 className="text-sm font-medium text-sage-700 pl-2 border-l-4"
-              style={{ borderColor: category.color.split(' ')[0].replace('bg', 'border') }}>
-              {category.label}
-            </h4>
-            <div className="space-y-2">
-              {categoryIngredients.map(({ index, ...ingredient }) => (
-                <IngredientInput
-                  key={`${variant ? `${variantIndex}-` : ''}${index}`}
-                  ingredients={ingredients}
-                  ingredient={ingredient}
-                  index={index}
-                  searchTerm={searchTerms[variant ? `${variantIndex}-${index}` : index] || ''}
-                  onSearchChange={(value) => {
-                    setCurrentIngredientIndex(index);
-                    setSearchTerms(prev => ({
-                      ...prev,
-                      [variant ? `${variantIndex}-${index}` : index]: value
-                    }));
-                  }}
-                  onIngredientSelect={(ingredientId) => {
-                    const selectedIngredient = availableIngredients.find(ing => ing.id === ingredientId);
-                    if (selectedIngredient) {
-                      if (variant) {
-                        const newVariants = [...recipe.variants];
-                        newVariants[variantIndex].ingredients[index] = {
-                          ...newVariants[variantIndex].ingredients[index],
-                          ingredient_id: ingredientId,
-                          unit: selectedIngredient.unit
-                        };
-                        setRecipe(prev => ({ ...prev, variants: newVariants }));
-                      } else {
-                        const newIngredients = [...recipe.base_ingredients];
-                        newIngredients[index] = {
-                          ...newIngredients[index],
-                          ingredient_id: ingredientId,
-                          unit: selectedIngredient.unit
-                        };
-                        setRecipe(prev => ({ ...prev, base_ingredients: newIngredients }));
-                      }
-                    }
-                  }}
-                  onQuantityChange={(value) => {
-                    if (variant) {
-                      const newVariants = [...recipe.variants];
-                      newVariants[variantIndex].ingredients[index].quantity = value;
-                      setRecipe(prev => ({ ...prev, variants: newVariants }));
-                    } else {
-                      const newIngredients = [...recipe.base_ingredients];
-                      newIngredients[index].quantity = value;
-                      setRecipe(prev => ({ ...prev, base_ingredients: newIngredients }));
-                    }
-                  }}
-                  onUnitChange={(value) => {
-                    if (variant) {
-                      const newVariants = [...recipe.variants];
-                      newVariants[variantIndex].ingredients[index].unit = value;
-                      setRecipe(prev => ({ ...prev, variants: newVariants }));
-                    } else {
-                      const newIngredients = [...recipe.base_ingredients];
-                      newIngredients[index].unit = value;
-                      setRecipe(prev => ({ ...prev, base_ingredients: newIngredients }));
-                    }
-                  }}
-                  onDelete={() => {
-                    if (variant) {
-                      const newVariants = [...recipe.variants];
-                      newVariants[variantIndex].ingredients = newVariants[variantIndex].ingredients
-                        .filter((_, i) => i !== index);
-                      setRecipe(prev => ({ ...prev, variants: newVariants }));
-                    } else {
-                      const newIngredients = recipe.base_ingredients
-                        .filter((_, i) => i !== index);
-                      setRecipe(prev => ({ ...prev, base_ingredients: newIngredients }));
-                    }
-                    const searchKey = variant ? `${variantIndex}-${index}` : index;
-                    const newSearchTerms = { ...searchTerms };
-                    delete newSearchTerms[searchKey];
-                    setSearchTerms(newSearchTerms);
-                  }}
-                  onCreateIngredient={handleCreateIngredient}
-                  availableIngredients={availableIngredients}
-                  units={units}
-                />
-              ))}
-            </div>
-          </div>
-        );
-      })}
-
-      {/* Message si aucun ingrédient */}
-      {ingredients.length === 0 && (
+      {currentIngredients.length === 0 && (
         <div className="text-center py-8 bg-sage-50 rounded-lg text-sage-600">
           Aucun ingrédient ajouté. Cliquez sur "Ajouter un ingrédient" pour commencer.
         </div>
       )}
+
+      {/* Modal pour créer un nouvel ingrédient */}
+      <Modal
+        isOpen={isAddingNewIngredient}
+        onClose={() => setIsAddingNewIngredient(false)}
+        title="Créer un nouvel ingrédient"
+        footerContent={
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setIsAddingNewIngredient(false)}
+              className="px-4 py-2 text-sage-700 bg-sage-100 rounded-lg 
+                hover:bg-sage-200 transition-colors duration-200"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateIngredient}
+              className="px-4 py-2 text-white bg-earth-600 rounded-lg 
+                hover:bg-earth-700 transition-colors duration-200"
+            >
+              Créer
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-sage-700">
+              Nom
+            </label>
+            <input
+              type="text"
+              value={newIngredientData.name}
+              onChange={(e) => setNewIngredientData(prev => ({
+                ...prev, name: e.target.value
+              }))}
+              className="mt-1 w-full rounded-lg border-sage-300 shadow-soft
+                focus:border-earth-500 focus:ring-earth-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-sage-700">
+              Catégorie
+            </label>
+            <select
+              value={newIngredientData.category}
+              onChange={(e) => setNewIngredientData(prev => ({
+                ...prev, category: e.target.value
+              }))}
+              className="mt-1 w-full rounded-lg border-sage-300 shadow-soft
+                focus:border-earth-500 focus:ring-earth-500"
+            >
+              {Object.entries(ingredientCategories).map(([id, category]) => (
+                <option key={id} value={id}>{category.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-sage-700">
+              Unité par défaut
+            </label>
+            <select
+              value={newIngredientData.unit}
+              onChange={(e) => setNewIngredientData(prev => ({
+                ...prev, unit: e.target.value
+              }))}
+              className="mt-1 w-full rounded-lg border-sage-300 shadow-soft
+                focus:border-earth-500 focus:ring-earth-500"
+            >
+              <option value="">Sans unité</option>
+              {units.map(unit => (
+                <option key={unit.value} value={unit.value}>
+                  {unit.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {newIngredientData.category === 'legumes' && (
+            <div>
+              <label className="block text-sm font-medium text-sage-700 mb-2">
+                Mois de disponibilité
+              </label>
+              <SeasonSelector
+                selectedMonths={newIngredientData.seasons}
+                onChange={(seasons) => setNewIngredientData(prev => ({
+                  ...prev,
+                  seasons
+                }))}
+              />
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 };

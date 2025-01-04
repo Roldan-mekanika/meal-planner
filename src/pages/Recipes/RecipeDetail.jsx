@@ -3,6 +3,25 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { ingredientCategories } from '../../config/categories';
+
+// Fonction utilitaire pour grouper les ingrédients par catégorie
+const groupIngredientsByCategory = (ingredients, availableIngredients) => {
+  return ingredients.reduce((groups, ingredient) => {
+    const ingredientDetails = availableIngredients.find(i => i.id === ingredient.ingredient_id);
+    if (!ingredientDetails) return groups;
+
+    const category = ingredientDetails.category;
+    if (!groups[category]) {
+      groups[category] = [];
+    }
+    groups[category].push({
+      ...ingredient,
+      name: ingredientDetails.name
+    });
+    return groups;
+  }, {});
+};
 
 const RecipeDetail = () => {
   const { id } = useParams();
@@ -10,10 +29,11 @@ const RecipeDetail = () => {
   const [recipe, setRecipe] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [tags, setTags] = useState([]);
-  const [ingredients, setIngredients] = useState([]);
+  const [availableIngredients, setAvailableIngredients] = useState([]);
   const [servings, setServings] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  // Détermine la recette active (base ou variante)
   const activeRecipe = selectedVariant ? {
     ...recipe,
     ...selectedVariant,
@@ -29,18 +49,24 @@ const RecipeDetail = () => {
           setRecipe(recipeData);
           setServings(recipeData.servings);
 
+          // Récupérer les tags et les ingrédients
           const [tagDocs, ingredientDocs] = await Promise.all([
             Promise.all(recipeData.tags.map(tagId => getDoc(doc(db, 'tags', tagId)))),
-            Promise.all(recipeData.base_ingredients.map(ing => getDoc(doc(db, 'ingredients', ing.ingredient_id))))
+            Promise.all([
+              ...new Set([
+                ...(recipeData.base_ingredients || []).map(ing => ing.ingredient_id),
+                ...(recipeData.variants || []).flatMap(variant => 
+                  (variant.ingredients || []).map(ing => ing.ingredient_id)
+                )
+              ])
+            ].map(ingId => getDoc(doc(db, 'ingredients', ingId))))
           ]);
 
           setTags(tagDocs.map(doc => ({ id: doc.id, ...doc.data() })));
-          setIngredients(ingredientDocs.map((doc, index) => ({
-            ...doc.data(),
-            id: doc.id,
-            quantity: recipeData.base_ingredients[index].quantity,
-            unit: recipeData.base_ingredients[index].unit
-          })));
+          setAvailableIngredients(ingredientDocs
+            .filter(doc => doc.exists())
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+          );
         }
       } catch (error) {
         console.error("Erreur:", error);
@@ -56,33 +82,18 @@ const RecipeDetail = () => {
     const variantIndex = parseInt(e.target.value);
     if (isNaN(variantIndex)) {
       setSelectedVariant(null);
-      const baseIngredients = await loadIngredients(recipe.base_ingredients);
-      setIngredients(baseIngredients);
       return;
     }
 
     const variant = recipe.variants[variantIndex];
     if (variant) {
-      const variantIngredients = await loadIngredients(variant.ingredients);
-      setIngredients(variantIngredients);
       setSelectedVariant(variant);
     }
   };
 
-  const loadIngredients = async (ingredientsList) => {
-    const ingredientDocs = await Promise.all(
-      ingredientsList.map(ing => getDoc(doc(db, 'ingredients', ing.ingredient_id)))
-    );
-    return ingredientDocs.map((doc, index) => ({
-      ...doc.data(),
-      id: doc.id,
-      quantity: ingredientsList[index].quantity,
-      unit: ingredientsList[index].unit
-    }));
-  };
-
   const calculateAdjustedQuantity = (quantity) => {
-    return recipe ? ((quantity * servings) / recipe.servings).toFixed(1) : quantity;
+    if (!recipe || !quantity) return quantity;
+    return ((quantity * servings) / recipe.servings).toFixed(1);
   };
 
   if (loading) {
@@ -97,6 +108,7 @@ const RecipeDetail = () => {
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8 animate-fade-in">
+      {/* Navigation */}
       <div className="flex justify-between items-center mb-6">
         <button
           onClick={() => navigate(-1)}
@@ -125,7 +137,9 @@ const RecipeDetail = () => {
         </Link>
       </div>
 
+      {/* Contenu principal */}
       <div className="bg-white rounded-lg shadow-soft overflow-hidden">
+        {/* Image de la recette */}
         {recipe.image_url && (
           <div className="relative h-64 md:h-96">
             <img
@@ -137,9 +151,11 @@ const RecipeDetail = () => {
           </div>
         )}
 
+        {/* Contenu de la recette */}
         <div className="p-6 md:p-8">
           <h1 className="text-3xl font-bold text-sage-900 mb-4">{recipe.title}</h1>
 
+          {/* Sélecteur de variante */}
           {recipe.variants && recipe.variants.length > 0 && (
             <div className="mb-6">
               <label className="block text-sm font-medium text-sage-700 mb-2">
@@ -159,6 +175,7 @@ const RecipeDetail = () => {
             </div>
           )}
 
+          {/* Tags */}
           <div className="flex flex-wrap gap-2 mb-6">
             {tags.map(tag => (
               <span
@@ -171,6 +188,7 @@ const RecipeDetail = () => {
             ))}
           </div>
 
+          {/* Temps de préparation */}
           <div className="grid grid-cols-3 gap-4 mb-8">
             <div className="bg-sage-50 p-4 rounded-lg text-center">
               <div className="text-sm text-sage-600">Préparation</div>
@@ -192,6 +210,7 @@ const RecipeDetail = () => {
             </div>
           </div>
 
+          {/* Nombre de portions */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-sage-700 mb-2">
               Nombre de portions
@@ -226,22 +245,41 @@ const RecipeDetail = () => {
             </div>
           </div>
 
+          {/* Ingrédients groupés par catégorie */}
           <div className="mb-8">
             <h2 className="text-xl font-bold text-sage-900 mb-4">Ingrédients</h2>
             <div className="bg-sage-50 rounded-lg p-6">
-              <ul className="space-y-3">
-                {ingredients.map(ingredient => (
-                  <li key={ingredient.id} className="flex justify-between items-center">
-                    <span className="text-sage-900">{ingredient.name}</span>
-                    <span className="text-sage-700 font-medium">
-                      {calculateAdjustedQuantity(ingredient.quantity)} {ingredient.unit}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              {Object.entries(ingredientCategories).map(([categoryId, category]) => {
+                const categoryIngredients = groupIngredientsByCategory(
+                  activeRecipe.base_ingredients || [],
+                  availableIngredients
+                )[categoryId];
+
+                if (!categoryIngredients?.length) return null;
+
+                return (
+                  <div key={categoryId} className="mb-6 last:mb-0">
+                    <h3 className="text-lg font-medium text-sage-900 mb-3 border-l-4 pl-3"
+                      style={{ borderColor: category.color.split(' ')[0].replace('bg', 'border') }}>
+                      {category.label}
+                    </h3>
+                    <ul className="space-y-2">
+                      {categoryIngredients.map((ingredient, index) => (
+                        <li key={index} className="flex justify-between items-center text-sage-700">
+                          <span>{ingredient.name}</span>
+                          <span className="font-medium">
+                            {calculateAdjustedQuantity(ingredient.quantity)} {ingredient.unit}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
+          {/* Instructions */}
           <div>
             <h2 className="text-xl font-bold text-sage-900 mb-4">Instructions</h2>
             <div 
