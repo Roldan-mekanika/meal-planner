@@ -4,6 +4,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { ingredientCategories } from '../../config/categories';
+import { useUnitPreferences, formatMeasurement } from '../../config/units';
 
 // Fonction utilitaire pour grouper les ingrédients par catégorie
 const groupIngredientsByCategory = (ingredients, availableIngredients) => {
@@ -32,6 +33,7 @@ const RecipeDetail = () => {
   const [availableIngredients, setAvailableIngredients] = useState([]);
   const [servings, setServings] = useState(0);
   const [loading, setLoading] = useState(true);
+  const { convertToPreferredUnit } = useUnitPreferences();
 
   // Détermine la recette active (base ou variante)
   const activeRecipe = selectedVariant ? {
@@ -94,6 +96,38 @@ const RecipeDetail = () => {
   const calculateAdjustedQuantity = (quantity) => {
     if (!recipe || !quantity) return quantity;
     return ((quantity * servings) / recipe.servings).toFixed(1);
+  };
+
+  const formatQuantity = (quantity, unit) => {
+    if (!quantity || !unit) return "";
+    const converted = convertToPreferredUnit(parseFloat(quantity), unit);
+    return `${converted.value} ${converted.unit}`;
+  };
+
+  const groupIngredientsByCategory = (ingredients, availableIngredients) => {
+    return ingredients.reduce((groups, ingredient) => {
+      const ingredientDetails = availableIngredients.find(i => i.id === ingredient.ingredient_id);
+      if (!ingredientDetails) return groups;
+
+      const category = ingredientDetails.category;
+      if (!groups[category]) {
+        groups[category] = [];
+      }
+
+      // Calculer la quantité ajustée selon le nombre de portions
+      const adjustedQuantity = calculateAdjustedQuantity(ingredient.quantity);
+      
+      // Convertir et formater la mesure
+      const { formatted } = convertToPreferredUnit(adjustedQuantity, ingredient.unit);
+
+      groups[category].push({
+        ...ingredient,
+        name: ingredientDetails.name,
+        displayMeasure: formatted
+      });
+      
+      return groups;
+    }, {});
   };
 
   if (loading) {
@@ -249,35 +283,35 @@ const RecipeDetail = () => {
           <div className="mb-8">
             <h2 className="text-xl font-bold text-sage-900 mb-4">Ingrédients</h2>
             <div className="bg-sage-50 rounded-lg p-6">
-              {Object.entries(ingredientCategories).map(([categoryId, category]) => {
-                const categoryIngredients = groupIngredientsByCategory(
-                  activeRecipe.base_ingredients || [],
-                  availableIngredients
-                )[categoryId];
+            {Object.entries(ingredientCategories).map(([categoryId, category]) => {
+            const categoryIngredients = groupIngredientsByCategory(
+              activeRecipe.base_ingredients || [],
+              availableIngredients
+            )[categoryId];
 
-                if (!categoryIngredients?.length) return null;
+            if (!categoryIngredients?.length) return null;
 
-                return (
-                  <div key={categoryId} className="mb-6 last:mb-0">
-                    <h3 className="text-lg font-medium text-sage-900 mb-3 border-l-4 pl-3"
-                      style={{ borderColor: category.color.split(' ')[0].replace('bg', 'border') }}>
-                      {category.label}
-                    </h3>
-                    <ul className="space-y-2">
-                      {categoryIngredients.map((ingredient, index) => (
-                        <li key={index} className="flex justify-between items-center text-sage-700">
-                          <span>{ingredient.name}</span>
-                          <span className="font-medium">
-                            {calculateAdjustedQuantity(ingredient.quantity)} {ingredient.unit}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+            return (
+              <div key={categoryId} className="mb-6 last:mb-0">
+                <h3 className="text-lg font-medium text-sage-900 mb-3 border-l-4 pl-3"
+                  style={{ borderColor: category.color.split(' ')[0].replace('bg', 'border') }}>
+                  {category.label}
+                </h3>
+                <ul className="space-y-2">
+                  {categoryIngredients.map((ingredient, index) => (
+                    <li key={index} className="flex justify-between items-center text-sage-700">
+                      <span>{ingredient.name}</span>
+                      <span className="font-medium">
+                        {ingredient.displayMeasure}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
           {/* Instructions */}
           <div>

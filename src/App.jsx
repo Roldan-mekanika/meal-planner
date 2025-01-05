@@ -1,3 +1,4 @@
+// src/App.jsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { PlanningProvider } from './contexts/PlanningContext';
@@ -51,6 +52,7 @@ function App() {
                   <Route index element={<Navigate to="/config/tags" replace />} />
                   <Route path="tags" element={<Tags />} />
                   <Route path="ingredients" element={<Ingredients />} />
+                  <Route path="settings" element={<></>} />
                 </Route>
 
                 {/* Routes Planning */}
