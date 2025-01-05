@@ -1,24 +1,18 @@
 // src/pages/Config/Ingredients.jsx
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, where } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { ingredientCategories, months } from '../../config/categories';
 import SeasonSelector from '../../components/common/SeasonSelector';
 
 const Ingredients = () => {
   const [ingredients, setIngredients] = useState([]);
-  // État initial avec les saisons
   const [newIngredient, setNewIngredient] = useState({ 
     name: '', 
     category: 'legumes',
     unit: 'g',
     seasons: []
   });
-  
-  // Debug: Log l'état quand il change
-  useEffect(() => {
-    console.log('Current ingredient state:', newIngredient);
-  }, [newIngredient]);
   const [isEditing, setIsEditing] = useState(false);
   const [editingIngredient, setEditingIngredient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,23 +24,26 @@ const Ingredients = () => {
     { value: 'ml', label: 'Millilitres (ml)' },
     { value: 'l', label: 'Litres (l)' },
     { value: 'unite', label: 'Unité' },
-    { value: 'cas', label: 'Cuillère à soupe' },
-    { value: 'cac', label: 'Cuillère à café' },
+    { value: 'tsp', label: 'Cuillère à café' },
+    { value: 'tbsp', label: 'Cuillère à soupe' },
+    { value: 'cup', label: 'Tasse' },
+    { value: 'pinch', label: 'Pincée' },
   ];
 
   useEffect(() => {
     const fetchIngredients = async () => {
-      const querySnapshot = await getDocs(collection(db, 'ingredients'));
-      const ingredientsData = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        console.log('Ingredient loaded:', { id: doc.id, ...data }); // Debug log
-        return {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'ingredients'));
+        const ingredientsData = querySnapshot.docs.map(doc => ({
           id: doc.id,
-          ...data,
-          seasons: data.seasons || [] // Ensure seasons is always an array
-        };
-      });
-      setIngredients(ingredientsData);
+          ...doc.data(),
+          seasons: doc.data().seasons || []
+        }));
+        setIngredients(ingredientsData);
+      } catch (error) {
+        console.error('Erreur lors du chargement des ingrédients:', error);
+        alert("Une erreur s'est produite lors du chargement des ingrédients");
+      }
     };
     fetchIngredients();
   }, []);
@@ -66,17 +63,19 @@ const Ingredients = () => {
       if (isEditing && editingIngredient) {
         await updateDoc(doc(db, 'ingredients', editingIngredient.id), ingredientData);
         setIngredients(ingredients.map(ingredient => 
-          ingredient.id === editingIngredient.id ? { ...ingredient, ...ingredientData } : ingredient
+          ingredient.id === editingIngredient.id ? { id: editingIngredient.id, ...ingredientData } : ingredient
         ));
       } else {
         const docRef = await addDoc(collection(db, 'ingredients'), ingredientData);
         setIngredients([...ingredients, { id: docRef.id, ...ingredientData }]);
       }
+
       setNewIngredient({ name: '', category: 'legumes', unit: 'g', seasons: [] });
       setIsEditing(false);
       setEditingIngredient(null);
     } catch (error) {
       console.error("Erreur lors de l'opération:", error);
+      alert("Une erreur s'est produite lors de l'opération");
     }
   };
 
@@ -85,9 +84,9 @@ const Ingredients = () => {
       const recipesSnapshot = await getDocs(collection(db, 'recipes'));
       const recipesUsingIngredient = recipesSnapshot.docs.filter(doc => {
         const recipeData = doc.data();
-        return recipeData.base_ingredients.some(ing => ing.ingredient_id === ingredientId) ||
+        return recipeData.base_ingredients?.some(ing => ing.ingredient_id === ingredientId) ||
                recipeData.variants?.some(variant => 
-                 variant.ingredients.some(ing => ing.ingredient_id === ingredientId)
+                 variant.ingredients?.some(ing => ing.ingredient_id === ingredientId)
                );
       });
 
@@ -111,11 +110,16 @@ const Ingredients = () => {
     }
   };
 
-  const filteredIngredients = ingredients.filter(ingredient => {
-    const matchesSearch = ingredient.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || ingredient.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  // Trier et filtrer les ingrédients
+  const filteredAndSortedIngredients = React.useMemo(() => {
+    const filtered = ingredients.filter(ingredient => {
+      const matchesSearch = ingredient.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = selectedCategory === 'all' || ingredient.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+
+    return filtered.sort((a, b) => a.name.localeCompare(b.name, 'fr-FR'));
+  }, [ingredients, searchTerm, selectedCategory]);
 
   const formatSeasons = (seasons) => {
     if (!seasons || seasons.length === 0) return 'Toute l\'année';
@@ -144,7 +148,8 @@ const Ingredients = () => {
                 id="name"
                 value={newIngredient.name}
                 onChange={(e) => setNewIngredient({ ...newIngredient, name: e.target.value })}
-                className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-earth-500 focus:ring-earth-500"
+                required
               />
             </div>
             
@@ -156,7 +161,7 @@ const Ingredients = () => {
                 id="category"
                 value={newIngredient.category}
                 onChange={(e) => setNewIngredient({ ...newIngredient, category: e.target.value })}
-                className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-earth-500 focus:ring-earth-500"
               >
                 {Object.values(ingredientCategories).map(category => (
                   <option key={category.id} value={category.id}>
@@ -174,7 +179,7 @@ const Ingredients = () => {
                 id="unit"
                 value={newIngredient.unit}
                 onChange={(e) => setNewIngredient({ ...newIngredient, unit: e.target.value })}
-                className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-earth-500 focus:ring-earth-500"
               >
                 {units.map(unit => (
                   <option key={unit.value} value={unit.value}>
@@ -185,7 +190,6 @@ const Ingredients = () => {
             </div>
           </div>
 
-          {/* Sélecteur de saisons pour les légumes */}
           {newIngredient.category === 'legumes' && (
             <div className="mt-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -193,10 +197,7 @@ const Ingredients = () => {
               </label>
               <SeasonSelector
                 selectedMonths={newIngredient.seasons || []}
-                onChange={(seasons) => {
-                  console.log('Seasons selected:', seasons); // Debug log
-                  setNewIngredient(prev => ({ ...prev, seasons }));
-                }}
+                onChange={(seasons) => setNewIngredient(prev => ({ ...prev, seasons }))}
               />
               <div className="mt-2 text-sm text-gray-500">
                 {newIngredient.seasons?.length 
@@ -222,7 +223,7 @@ const Ingredients = () => {
             )}
             <button
               type="submit"
-              className="px-4 py-2 bg-green-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-green-700"
+              className="px-4 py-2 bg-earth-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-earth-700"
             >
               {isEditing ? 'Mettre à jour' : 'Ajouter'}
             </button>
@@ -243,7 +244,7 @@ const Ingredients = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Rechercher..."
-              className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+              className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-earth-500 focus:ring-earth-500"
             />
           </div>
           
@@ -255,7 +256,7 @@ const Ingredients = () => {
               id="category-filter"
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+              className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-earth-500 focus:ring-earth-500"
             >
               <option value="all">Toutes les catégories</option>
               {Object.values(ingredientCategories).map(category => (
@@ -271,9 +272,9 @@ const Ingredients = () => {
       {/* Liste des ingrédients */}
       <div className="bg-white rounded-lg shadow">
         {Object.values(ingredientCategories).map(category => {
-          const categoryIngredients = filteredIngredients.filter(
-            ingredient => ingredient.category === category.id
-          );
+          const categoryIngredients = filteredAndSortedIngredients
+            .filter(ing => ing.category === category.id);
+
           return categoryIngredients.length > 0 && (
             <div key={category.id} className="p-6 border-b last:border-b-0">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
@@ -281,7 +282,7 @@ const Ingredients = () => {
               </h3>
               <div className="flex flex-wrap gap-2">
                 {categoryIngredients.map(ingredient => (
-                  <div
+                  <span
                     key={ingredient.id}
                     className={`group relative inline-flex items-center px-3 py-1 rounded-full text-sm ${ingredientCategories[ingredient.category].color}`}
                   >
@@ -293,15 +294,12 @@ const Ingredients = () => {
                     )}
                     <button
                       onClick={() => {
-                        console.log('Editing ingredient:', ingredient); // Debug log
-                        const editedIngredient = {
-                          name: ingredient.name,
-                          category: ingredient.category,
+                        setNewIngredient({ 
+                          name: ingredient.name, 
+                          category: ingredient.category, 
                           unit: ingredient.unit,
                           seasons: ingredient.seasons || []
-                        };
-                        console.log('Setting edited ingredient:', editedIngredient); // Debug log
-                        setNewIngredient(editedIngredient);
+                        });
                         setIsEditing(true);
                         setEditingIngredient(ingredient);
                       }}
@@ -315,7 +313,7 @@ const Ingredients = () => {
                     >
                       ✖️
                     </button>
-                  </div>
+                  </span>
                 ))}
               </div>
             </div>

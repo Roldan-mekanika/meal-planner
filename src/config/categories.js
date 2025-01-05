@@ -97,7 +97,13 @@ export const ingredientCategories = {
   legumes: { 
     id: 'legumes', 
     label: 'Légumes', 
-    color: 'bg-green-200 text-green-900',
+    color: 'bg-green-100 text-green-800',
+    hasSeasons: true
+  },
+  fruits: {
+    id: 'fruits',
+    label: 'Fruits',
+    color: 'bg-orange-100 text-orange-800',
     hasSeasons: true
   },
   proteines: { 
@@ -113,11 +119,26 @@ export const ingredientCategories = {
   cremerie: { 
     id: 'cremerie', 
     label: 'Crèmerie', 
-    color: 'bg-pink-100 text-pink-800' 
+    color: 'bg-blue-100 text-blue-800' 
   },
-  epicerie: { 
-    id: 'epicerie', 
-    label: 'Épicerie', 
-    color: 'bg-gray-100 text-gray-800' 
+  conserves: {
+    id: 'conserves',
+    label: 'Conserves',
+    color: 'bg-purple-100 text-purple-800'
+  },
+  epices: {
+    id: 'epices',
+    label: 'Épices',
+    color: 'bg-rose-100 text-rose-800'
+  },
+  condiments: {
+    id: 'condiments',
+    label: 'Condiments',
+    color: 'bg-amber-100 text-amber-800'
+  },
+  graines: {
+    id: 'graines',
+    label: 'Graines',
+    color: 'bg-lime-100 text-lime-800'
   }
 };
