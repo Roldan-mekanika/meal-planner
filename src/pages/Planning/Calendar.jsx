@@ -4,8 +4,10 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import CalendarGrid from '../../components/planning/CalendarGrid';
 import { usePlanning } from '../../contexts/PlanningContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 const Calendar = () => {
+  const { user } = useAuth();
   const { updateMeal } = usePlanning();
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,7 +19,7 @@ const Calendar = () => {
   useEffect(() => {
     const fetchRecipes = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, 'recipes'));
+        const querySnapshot = await getDocs(collection(db, `users/${user.uid}/recipes`));
         setRecipes(querySnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
@@ -30,7 +32,7 @@ const Calendar = () => {
     };
 
     fetchRecipes();
-  }, []);
+  }, [user.uid]);
 
   const handleSelectMeal = (day, mealType) => {
     setSelectedSlot({ day, mealType });

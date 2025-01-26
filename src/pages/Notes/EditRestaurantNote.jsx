@@ -5,8 +5,10 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
+import { useAuth } from '../../contexts/AuthContext';
 
 const EditRestaurantNote = () => {
+  const { user } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -15,7 +17,7 @@ const EditRestaurantNote = () => {
   useEffect(() => {
     const fetchNote = async () => {
       try {
-        const noteDoc = await getDoc(doc(db, 'restaurant_notes', id));
+        const noteDoc = await getDoc(doc(db, `users/${user.uid}/restaurant_notes`, id));
         if (noteDoc.exists()) {
           const noteData = {
             id: noteDoc.id,

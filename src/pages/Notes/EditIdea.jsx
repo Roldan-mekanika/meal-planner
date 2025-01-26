@@ -5,8 +5,10 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
+import { useAuth } from '../../contexts/AuthContext';
 
 const EditIdea = () => {
+  const { user } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -15,7 +17,7 @@ const EditIdea = () => {
   useEffect(() => {
     const fetchIdea = async () => {
       try {
-        const ideaDoc = await getDoc(doc(db, 'ideas', id));
+        const ideaDoc = await getDoc(doc(db, `users/${user.uid}/ideas`, id));
         if (ideaDoc.exists()) {
           const ideaData = {
             id: ideaDoc.id,

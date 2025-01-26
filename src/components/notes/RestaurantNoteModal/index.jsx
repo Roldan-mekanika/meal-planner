@@ -4,8 +4,10 @@ import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import Modal from '../../common/Modal';
 import RecipeEditor from '../../../components/common/RecipeEditor';
+import { useAuth } from '../../../contexts/AuthContext';
 
 const AddRestaurantNoteModal = ({ isOpen, onClose, onSave }) => {
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     restaurant: '',
     location: '',
@@ -27,7 +29,7 @@ const AddRestaurantNoteModal = ({ isOpen, onClose, onSave }) => {
         created_at: new Date()
       };
 
-      const docRef = await addDoc(collection(db, 'restaurant_notes'), noteData);
+      const docRef = await addDoc(collection(db, `users/${user.uid}/restaurant_notes`), noteData);
       const newNote = { id: docRef.id, ...noteData, date: formData.date };
       
       onSave(newNote);
