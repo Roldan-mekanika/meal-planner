@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { useAuth } from '../../contexts/AuthContext';
 import { ingredientCategories } from '../../config/categories';
 import { useUnitPreferences, formatMeasurement } from '../../config/units';
 
@@ -27,6 +28,7 @@ const groupIngredientsByCategory = (ingredients, availableIngredients) => {
 const RecipeDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [recipe, setRecipe] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [tags, setTags] = useState([]);
@@ -45,7 +47,7 @@ const RecipeDetail = () => {
   useEffect(() => {
     const fetchRecipe = async () => {
       try {
-        const recipeDoc = await getDoc(doc(db, 'recipes', id));
+        const recipeDoc = await getDoc(doc(db, `users/${user.uid}/recipes`, id));
         if (recipeDoc.exists()) {
           const recipeData = { id: recipeDoc.id, ...recipeDoc.data() };
           setRecipe(recipeData);
@@ -53,7 +55,7 @@ const RecipeDetail = () => {
 
           // Récupérer les tags et les ingrédients
           const [tagDocs, ingredientDocs] = await Promise.all([
-            Promise.all(recipeData.tags.map(tagId => getDoc(doc(db, 'tags', tagId)))),
+            Promise.all(recipeData.tags.map(tagId => getDoc(doc(db, `users/${user.uid}/tags`, tagId)))),
             Promise.all([
               ...new Set([
                 ...(recipeData.base_ingredients || []).map(ing => ing.ingredient_id),
@@ -61,7 +63,7 @@ const RecipeDetail = () => {
                   (variant.ingredients || []).map(ing => ing.ingredient_id)
                 )
               ])
-            ].map(ingId => getDoc(doc(db, 'ingredients', ingId))))
+            ].map(ingId => getDoc(doc(db, `users/${user.uid}/ingredients`, ingId))))
           ]);
 
           setTags(tagDocs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -78,7 +80,7 @@ const RecipeDetail = () => {
     };
 
     fetchRecipe();
-  }, [id]);
+  }, [id, user.uid]);
 
   const handleVariantChange = async (e) => {
     const variantIndex = parseInt(e.target.value);

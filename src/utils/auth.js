@@ -1,71 +1,105 @@
-// src/utils/auth.js
-import { db } from '../config/firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  updateProfile 
+} from 'firebase/auth';
+import { 
+  doc, 
+  setDoc, 
+  collection,
+  writeBatch,
+  serverTimestamp 
+} from 'firebase/firestore';
+import { defaultTags } from '../config/defaultData';
 
-export const createUserDocument = async (user, additionalData = {}) => {
-  if (!user) return;
+export const signUp = async (email, password, displayName) => {
+  try {
+    // Créer l'utilisateur dans Firebase Auth
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
 
-  const userRef = doc(db, 'users', user.uid);
-  const snapshot = await getDoc(userRef);
+    // Mettre à jour le profil avec le nom d'affichage
+    await updateProfile(user, { displayName });
 
-  if (!snapshot.exists()) {
-    const { email, displayName, photoURL } = user;
-    const createdAt = new Date();
+    // Créer le document utilisateur dans Firestore
+    const userDoc = doc(db, 'users', user.uid);
+    const batch = writeBatch(db);
 
-    try {
-      await setDoc(userRef, {
-        email,
-        displayName,
-        photoURL,
-        createdAt,
-        lastLoginAt: createdAt,
-        preferences: {
-          language: 'fr',
-          weightSystem: 'metric',
-          volumeSystem: 'metric'
-        },
-        ...additionalData
+    // Document utilisateur principal
+    batch.set(userDoc, {
+      email,
+      displayName,
+      createdAt: serverTimestamp(),
+      lastLoginAt: serverTimestamp(),
+      preferences: {
+        weightSystem: 'metric',
+        volumeSystem: 'metric',
+        enabledTagCategories: ['regime', 'typeRepas', 'pays']
+      }
+    });
+
+    // Créer les tags par défaut pour l'utilisateur
+    const tagsCollectionRef = collection(db, `users/${user.uid}/tags`);
+    Object.values(defaultTags).flat().forEach(tag => {
+      const tagDoc = doc(tagsCollectionRef);
+      batch.set(tagDoc, {
+        ...tag,
+        createdAt: serverTimestamp()
       });
-    } catch (error) {
-      console.error('Error creating user document:', error);
-    }
-  } else {
+    });
+
+    await batch.commit();
+    return user;
+
+  } catch (error) {
+    throw new Error(formatAuthError(error));
+  }
+};
+
+export const signIn = async (email, password) => {
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    
     // Mettre à jour la dernière connexion
-    try {
-      await updateDoc(userRef, {
-        lastLoginAt: new Date()
-      });
-    } catch (error) {
-      console.error('Error updating last login:', error);
-    }
-  }
+    const userDoc = doc(db, 'users', userCredential.user.uid);
+    await setDoc(userDoc, {
+      lastLoginAt: serverTimestamp()
+    }, { merge: true });
 
-  return userRef;
-};
-
-export const getUserPreferences = async (userId) => {
-  if (!userId) return null;
-
-  try {
-    const userDoc = await getDoc(doc(db, 'users', userId));
-    if (userDoc.exists()) {
-      return userDoc.data().preferences;
-    }
-    return null;
+    return userCredential.user;
   } catch (error) {
-    console.error('Error fetching user preferences:', error);
-    return null;
+    throw new Error(formatAuthError(error));
   }
 };
 
-export const updateUserPreferences = async (userId, preferences) => {
-  if (!userId) return;
-
+export const signOut = async () => {
   try {
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, { preferences });
+    await firebaseSignOut(auth);
   } catch (error) {
-    console.error('Error updating user preferences:', error);
-    throw error;
+    throw new Error(formatAuthError(error));
+  }
+};
+
+// Formater les messages d'erreur
+const formatAuthError = (error) => {
+  switch (error.code) {
+    case 'auth/email-already-in-use':
+      return 'Cette adresse email est déjà utilisée.';
+    case 'auth/invalid-email':
+      return 'L\'adresse email n\'est pas valide.';
+    case 'auth/operation-not-allowed':
+      return 'L\'inscription n\'est pas activée.';
+    case 'auth/weak-password':
+      return 'Le mot de passe est trop faible.';
+    case 'auth/user-disabled':
+      return 'Ce compte a été désactivé.';
+    case 'auth/user-not-found':
+      return 'Aucun utilisateur trouvé avec cette adresse email.';
+    case 'auth/wrong-password':
+      return 'Mot de passe incorrect.';
+    default:
+      return error.message || 'Une erreur est survenue.';
   }
 };

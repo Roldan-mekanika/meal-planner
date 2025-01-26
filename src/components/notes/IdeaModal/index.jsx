@@ -4,8 +4,10 @@ import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import Modal from '../../common/Modal';
 import RecipeEditor from '../../../components/common/RecipeEditor';
+import { useAuth } from '../../../contexts/AuthContext';
 
 const AddIdeaModal = ({ isOpen, onClose, onSave }) => {
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     title: '',
     date: new Date().toISOString().split('T')[0],
@@ -25,7 +27,7 @@ const AddIdeaModal = ({ isOpen, onClose, onSave }) => {
         created_at: new Date()
       };
 
-      const docRef = await addDoc(collection(db, 'ideas'), ideaData);
+      const docRef = await addDoc(collection(db, `users/${user.uid}/ideas`), ideaData);
       const newIdea = { 
         id: docRef.id, 
         ...ideaData, 

@@ -1,16 +1,22 @@
 // src/App.jsx
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
 import { PlanningProvider } from './contexts/PlanningContext';
+import RequireAuth from './components/auth/RequireAuth';
 import Navigation from './components/Navigation';
 
-// Routes principales
+// Routes Auth
+import Login from './pages/Auth/Login';
+import Signup from './pages/Auth/Signup';
+
+// Routes Recipes
 import Recipes from './pages/Recipes/Recipes';
 import CreateRecipe from './pages/Recipes/CreateRecipe';
 import RecipeDetail from './pages/Recipes/RecipeDetail';
 import EditRecipe from './pages/Recipes/EditRecipe';
 
-// Routes Configuration
+// Routes Config
 import Config from './pages/Config/Config';
 import Tags from './pages/Config/Tags';
 import Ingredients from './pages/Config/Ingredients';
@@ -30,55 +36,62 @@ import IdeaDetail from './pages/Notes/IdeaDetail';
 import EditIdea from './pages/Notes/EditIdea';
 
 function App() {
-  return (
-    <PlanningProvider>
-      <Router>
-        <div className="min-h-screen bg-gray-50">
-          <Navigation />
-          <main className="w-full">
-            <div className="container mx-auto py-6">
-              <Routes>
-                {/* Route par défaut */}
-                <Route path="/" element={<Navigate to="/recipes" replace />} />
+ return (
+   <AuthProvider>
+     <PlanningProvider>
+       <Router>
+         <Routes>
+           {/* Routes Publiques */}
+           <Route path="/login" element={<Login />} />
+           <Route path="/signup" element={<Signup />} />
 
-                {/* Routes Recettes */}
-                <Route path="/recipes" element={<Recipes />} />
-                <Route path="/recipes/create" element={<CreateRecipe />} />
-                <Route path="/recipes/:id/edit" element={<EditRecipe />} />
-                <Route path="/recipes/:id" element={<RecipeDetail />} />
-                
-                {/* Routes Configuration */}
-                <Route path="/config" element={<Config />}>
-                  <Route index element={<Navigate to="/config/tags" replace />} />
-                  <Route path="tags" element={<Tags />} />
-                  <Route path="ingredients" element={<Ingredients />} />
-                  <Route path="settings" element={<></>} />
-                </Route>
+           {/* Routes Protégées */}
+           <Route path="/" element={
+             <RequireAuth>
+               <div className="min-h-screen bg-sage-50">
+                 <Navigation />
+                 <main className="w-full">
+                   <div className="container mx-auto py-6">
+                     <Outlet />
+                   </div>
+                 </main>
+               </div>
+             </RequireAuth>
+           }>
+             <Route index element={<Navigate to="/recipes" replace />} />
+             <Route path="recipes" element={<Recipes />} />
+             <Route path="recipes/create" element={<CreateRecipe />} />
+             <Route path="recipes/:id/edit" element={<EditRecipe />} />
+             <Route path="recipes/:id" element={<RecipeDetail />} />
 
-                {/* Routes Planning */}
-                <Route path="/planning" element={<Planning />}>
-                  <Route index element={<Navigate to="/planning/calendar" replace />} />
-                  <Route path="calendar" element={<Calendar />} />
-                  <Route path="shopping-list" element={<ShoppingList />} />
-                </Route>
+             <Route path="config" element={<Config />}>
+               <Route index element={<Navigate to="/config/tags" replace />} />
+               <Route path="tags" element={<Tags />} />
+               <Route path="ingredients" element={<Ingredients />} />
+               <Route path="settings" element={<></>} />
+             </Route>
 
-                {/* Routes Notes */}
-                <Route path="/notes" element={<Notes />}>
-                  <Route index element={<Navigate to="/notes/restaurants" replace />} />
-                  <Route path="restaurants" element={<RestaurantNotes />} />
-                  <Route path="restaurants/:id" element={<RestaurantNoteDetail />} />
-                  <Route path="restaurants/:id/edit" element={<EditRestaurantNote />} />
-                  <Route path="ideas" element={<Ideas />} />
-                  <Route path="ideas/:id" element={<IdeaDetail />} />
-                  <Route path="ideas/:id/edit" element={<EditIdea />} />
-                </Route>
-              </Routes>
-            </div>
-          </main>
-        </div>
-      </Router>
-    </PlanningProvider>
-  );
+             <Route path="planning" element={<Planning />}>
+               <Route index element={<Navigate to="/planning/calendar" replace />} />
+               <Route path="calendar" element={<Calendar />} />
+               <Route path="shopping-list" element={<ShoppingList />} />
+             </Route>
+
+             <Route path="notes" element={<Notes />}>
+               <Route index element={<Navigate to="/notes/restaurants" replace />} />
+               <Route path="restaurants" element={<RestaurantNotes />} />
+               <Route path="restaurants/:id" element={<RestaurantNoteDetail />} />
+               <Route path="restaurants/:id/edit" element={<EditRestaurantNote />} />
+               <Route path="ideas" element={<Ideas />} />
+               <Route path="ideas/:id" element={<IdeaDetail />} />
+               <Route path="ideas/:id/edit" element={<EditIdea />} />
+             </Route>
+           </Route>
+         </Routes>
+       </Router>
+     </PlanningProvider>
+   </AuthProvider>
+ );
 }
 
 export default App;

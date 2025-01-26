@@ -1,11 +1,13 @@
 // src/pages/Notes/Ideas.jsx
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { useAuth } from '../../contexts/AuthContext';
 import IdeaCard from '../../components/notes/IdeaCard';
 import AddIdeaModal from '../../components/notes/IdeaModal';
 
 const Ideas = () => {
+  const { user } = useAuth();
   const [ideas, setIdeas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isAddingIdea, setIsAddingIdea] = useState(false);
@@ -13,17 +15,23 @@ const Ideas = () => {
 
   useEffect(() => {
     fetchIdeas();
-  }, []);
+  }, [user.uid]);
 
   const fetchIdeas = async () => {
     try {
-      const ideasSnapshot = await getDocs(collection(db, 'ideas'));
+      const ideasQuery = query(
+        collection(db, `users/${user.uid}/ideas`),
+        orderBy('date', 'desc')
+      );
+      
+      const ideasSnapshot = await getDocs(ideasQuery);
       const ideasData = ideasSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         date: doc.data().date.toDate().toISOString().split('T')[0]
       }));
-      setIdeas(ideasData.sort((a, b) => new Date(b.date) - new Date(a.date)));
+      
+      setIdeas(ideasData);
     } catch (error) {
       console.error("Erreur lors du chargement des idées:", error);
     } finally {
@@ -32,9 +40,13 @@ const Ideas = () => {
   };
 
   const handleDeleteIdea = async (ideaId) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette idée ?')) {
+      return;
+    }
+
     try {
-      await deleteDoc(doc(db, 'ideas', ideaId));
-      setIdeas(ideas.filter(idea => idea.id !== ideaId));
+      await deleteDoc(doc(db, `users/${user.uid}/ideas`, ideaId));
+      setIdeas(prevIdeas => prevIdeas.filter(idea => idea.id !== ideaId));
     } catch (error) {
       console.error("Erreur lors de la suppression:", error);
       alert("Une erreur s'est produite lors de la suppression de l'idée");
@@ -77,8 +89,7 @@ const Ideas = () => {
               stroke="currentColor"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                d="M12 6v6m0 0v6m0-6h6m-6 0H6" 
-              />
+                d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
             Noter une idée
           </button>
@@ -103,8 +114,7 @@ const Ideas = () => {
               stroke="currentColor"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
-              />
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
         </div>
@@ -119,20 +129,23 @@ const Ideas = () => {
               stroke="currentColor"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" 
-              />
+                d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
             <h3 className="mt-4 text-lg font-medium text-sage-900">Aucune idée trouvée</h3>
             <p className="mt-2 text-sage-600">
-              Commencez à noter vos inspirations culinaires.
+              {searchTerm
+                ? 'Essayez de modifier vos critères de recherche.'
+                : 'Commencez à noter vos inspirations culinaires.'}
             </p>
-            <button
-              onClick={() => setIsAddingIdea(true)}
-              className="mt-4 inline-flex items-center px-4 py-2 bg-earth-600 text-white 
-                rounded-lg hover:bg-earth-700 transition-colors duration-200"
-            >
-              Noter votre première idée
-            </button>
+            {!searchTerm && (
+              <button
+                onClick={() => setIsAddingIdea(true)}
+                className="mt-4 inline-flex items-center px-4 py-2 bg-earth-600 text-white 
+                  rounded-lg hover:bg-earth-700 transition-colors duration-200"
+              >
+                Noter votre première idée
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -152,8 +165,7 @@ const Ideas = () => {
         isOpen={isAddingIdea}
         onClose={() => setIsAddingIdea(false)}
         onSave={async (newIdea) => {
-          // Logique d'ajout existante
-          setIdeas([newIdea, ...ideas]);
+          setIdeas(prevIdeas => [newIdea, ...prevIdeas]);
           setIsAddingIdea(false);
         }}
       />

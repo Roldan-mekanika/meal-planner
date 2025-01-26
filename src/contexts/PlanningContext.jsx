@@ -1,6 +1,7 @@
 // src/contexts/PlanningContext.jsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { collection, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { useAuth } from './AuthContext';
 import { db } from '../config/firebase';
 
 const PlanningContext = createContext();
@@ -14,6 +15,7 @@ export const usePlanning = () => {
 };
 
 export const PlanningProvider = ({ children }) => {
+  const { user } = useAuth();
   const [weeklyPlan, setWeeklyPlan] = useState(null);
   const [currentWeek, setCurrentWeek] = useState(new Date());
 
@@ -24,9 +26,11 @@ export const PlanningProvider = ({ children }) => {
   };
 
   const loadWeeklyPlan = async (week = new Date()) => {
+    if (!user) return; // Ajout d'une vérification de l'utilisateur
+
     const weekId = getWeekId(week);
     try {
-      const docRef = doc(db, 'weekly_plans', weekId);
+      const docRef = doc(db, `users/${user.uid}/weekly_plans`, weekId);
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
@@ -34,13 +38,13 @@ export const PlanningProvider = ({ children }) => {
       } else {
         const newPlan = {
           id: weekId,
-          monday: { lunch: null, dinner: null },
-          tuesday: { lunch: null, dinner: null },
-          wednesday: { lunch: null, dinner: null },
-          thursday: { lunch: null, dinner: null },
-          friday: { lunch: null, dinner: null },
-          saturday: { lunch: null, dinner: null },
-          sunday: { lunch: null, dinner: null }
+          monday: { lunch: [], dinner: [] },
+          tuesday: { lunch: [], dinner: [] },
+          wednesday: { lunch: [], dinner: [] },
+          thursday: { lunch: [], dinner: [] },
+          friday: { lunch: [], dinner: [] },
+          saturday: { lunch: [], dinner: [] },
+          sunday: { lunch: [], dinner: [] }
         };
         await setDoc(docRef, newPlan);
         setWeeklyPlan(newPlan);
@@ -51,15 +55,15 @@ export const PlanningProvider = ({ children }) => {
   };
 
   const updateMeal = async (day, mealType, mealInfo) => {
-    if (!weeklyPlan) return;
+    if (!weeklyPlan || !user) return;
   
     try {
       const weekId = getWeekId(currentWeek);
-      const docRef = doc(db, 'weekly_plans', weekId);
+      const docRef = doc(db, `users/${user.uid}/weekly_plans`, weekId);
       
       // On s'assure que la liste des repas existe
       const currentMeals = weeklyPlan[day][mealType] || [];
-      const updatedMeals = Array.isArray(currentMeals) ? currentMeals : [currentMeals];
+      const updatedMeals = Array.isArray(currentMeals) ? currentMeals : [];
       
       // On ajoute le nouveau repas à la liste
       updatedMeals.push({
@@ -84,11 +88,11 @@ export const PlanningProvider = ({ children }) => {
   };
   
   const removeMeal = async (day, mealType, index) => {
-    if (!weeklyPlan) return;
+    if (!weeklyPlan || !user) return;
   
     try {
       const weekId = getWeekId(currentWeek);
-      const docRef = doc(db, 'weekly_plans', weekId);
+      const docRef = doc(db, `users/${user.uid}/weekly_plans`, weekId);
       
       const currentMeals = weeklyPlan[day][mealType];
       if (!Array.isArray(currentMeals)) return;
@@ -100,7 +104,7 @@ export const PlanningProvider = ({ children }) => {
         ...weeklyPlan,
         [day]: {
           ...weeklyPlan[day],
-          [mealType]: updatedMeals.length > 0 ? updatedMeals : null
+          [mealType]: updatedMeals
         }
       };
   
@@ -112,11 +116,11 @@ export const PlanningProvider = ({ children }) => {
   };
   
   const updateServings = async (day, mealType, servings, index) => {
-    if (!weeklyPlan?.[day]?.[mealType]) return;
+    if (!weeklyPlan?.[day]?.[mealType] || !user) return;
   
     try {
       const weekId = getWeekId(currentWeek);
-      const docRef = doc(db, 'weekly_plans', weekId);
+      const docRef = doc(db, `users/${user.uid}/weekly_plans`, weekId);
       
       const currentMeals = weeklyPlan[day][mealType];
       if (!Array.isArray(currentMeals)) return;
@@ -143,8 +147,10 @@ export const PlanningProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    loadWeeklyPlan(currentWeek);
-  }, [currentWeek]);
+    if (user) {
+      loadWeeklyPlan(currentWeek);
+    }
+  }, [currentWeek, user]);
 
   return (
     <PlanningContext.Provider value={{

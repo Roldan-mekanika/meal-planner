@@ -3,8 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { useAuth } from '../../contexts/AuthContext';
 
 const RestaurantNoteDetail = () => {
+  const { user } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const [note, setNote] = useState(null);
@@ -13,7 +15,7 @@ const RestaurantNoteDetail = () => {
   useEffect(() => {
     const fetchNote = async () => {
       try {
-        const noteDoc = await getDoc(doc(db, 'restaurant_notes', id));
+        const noteDoc = await getDoc(doc(db, `users/${user.uid}/restaurant_notes`, id));
         if (noteDoc.exists()) {
           const noteData = {
             id: noteDoc.id,

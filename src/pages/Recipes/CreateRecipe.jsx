@@ -8,8 +8,10 @@ import { tagCategories } from '../../config/categories';
 import RecipeEditor from '../../components/common/RecipeEditor';
 import RecipeIngredientForm from '../../components/recipes/RecipeIngredientForm';
 import { processImage } from '../../utils/imageProcessor';
+import { useAuth } from '../../contexts/AuthContext';
 
 const CreateRecipe = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [availableTags, setAvailableTags] = useState([]);
@@ -38,8 +40,8 @@ const CreateRecipe = () => {
     const fetchData = async () => {
       try {
         const [tagsSnapshot, ingredientsSnapshot] = await Promise.all([
-          getDocs(collection(db, 'tags')),
-          getDocs(collection(db, 'ingredients'))
+          getDocs(collection(db, `users/${user.uid}/tags`)),
+          getDocs(collection(db, `users/${user.uid}/ingredients`))
         ]);
 
         setAvailableTags(tagsSnapshot.docs.map(doc => ({
@@ -113,7 +115,7 @@ const CreateRecipe = () => {
       let imageUrl = '';
       if (image) {
         try {
-          const storageRef = ref(storage, `recipe-images/${Date.now()}-${image.name}`);
+          const storageRef = ref(storage, `users/${user.uid}/recipe-images/${Date.now()}-${image.name}`);
           await uploadBytes(storageRef, image);
           imageUrl = await getDownloadURL(storageRef);
         } catch (error) {
@@ -131,7 +133,7 @@ const CreateRecipe = () => {
         created_at: new Date()
       };
 
-      await addDoc(collection(db, 'recipes'), recipeData);
+      await addDoc(collection(db, `users/${user.uid}/recipes`), recipeData);
       alert('Recette créée avec succès !');
       navigate('/recipes');
     } catch (error) {

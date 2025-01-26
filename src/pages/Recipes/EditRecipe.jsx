@@ -9,8 +9,10 @@ import RecipeEditor from '../../components/common/RecipeEditor/index.jsx';
 import IngredientInput from '../../components/common/IngredientInput/index.jsx';
 import RecipeIngredientForm from '../../components/recipes/RecipeIngredientForm';
 import { processImage, validateRecipe, formatErrorMessage } from '../../utils/imageProcessor';
+import { useAuth } from '../../contexts/AuthContext';
 
 const EditRecipe = () => {
+  const { user } = useAuth(); 
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -48,7 +50,7 @@ const EditRecipe = () => {
   useEffect(() => {
     const fetchRecipe = async () => {
       try {
-        const recipeDoc = await getDoc(doc(db, 'recipes', id));
+        const recipeDoc = await getDoc(doc(db, `users/${user.uid}/recipes`, id));
         
         if (recipeDoc.exists()) {
           const recipeData = {
@@ -165,7 +167,7 @@ const handleSubmit = async (e) => {
     let imageUrl = recipe.image_url || '';
     if (image) {
       try {
-        const storageRef = ref(storage, `recipe-images/${Date.now()}-${image.name}`);
+        const storageRef = ref(storage, `users/${user.uid}/recipe-images/${Date.now()}-${image.name}`);
         await uploadBytes(storageRef, image);
         imageUrl = await getDownloadURL(storageRef);
       } catch (error) {
@@ -175,7 +177,7 @@ const handleSubmit = async (e) => {
     }
 
     // Créez une référence explicite au document
-    const recipeRef = doc(db, 'recipes', id);
+    const recipeRef = doc(db, `users/${user.uid}/recipes`, id);
 
     const recipeData = {
       ...recipe,

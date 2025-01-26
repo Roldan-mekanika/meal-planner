@@ -3,8 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { useAuth } from '../../contexts/AuthContext';
 
 const IdeaDetail = () => {
+  const { user } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const [idea, setIdea] = useState(null);
@@ -13,7 +15,7 @@ const IdeaDetail = () => {
   useEffect(() => {
     const fetchIdea = async () => {
       try {
-        const ideaDoc = await getDoc(doc(db, 'ideas', id));
+        const ideaDoc = await getDoc(doc(db, `users/${user.uid}/ideas`, id));
         if (ideaDoc.exists()) {
           const ideaData = {
             id: ideaDoc.id,
