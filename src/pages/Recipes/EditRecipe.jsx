@@ -10,6 +10,7 @@ import IngredientInput from '../../components/common/IngredientInput/index.jsx';
 import RecipeIngredientForm from '../../components/recipes/RecipeIngredientForm';
 import { processImage, validateRecipe, formatErrorMessage } from '../../utils/imageProcessor';
 import { useAuth } from '../../contexts/AuthContext';
+import TagSelectionSection from '../../components/recipes/TagSelectionSection';
 
 const EditRecipe = () => {
   const { user } = useAuth(); 
@@ -48,84 +49,69 @@ const EditRecipe = () => {
   ];
 
   useEffect(() => {
-    const fetchRecipe = async () => {
+    const fetchData = async () => {
       try {
-        const recipeDoc = await getDoc(doc(db, `users/${user.uid}/recipes`, id));
-        
+        // Récupérer les données
+        const [recipeDoc, ingredientsSnapshot] = await Promise.all([
+          getDoc(doc(db, `users/${user.uid}/recipes`, id)),
+          getDocs(collection(db, `users/${user.uid}/ingredients`))
+        ]);
+
         if (recipeDoc.exists()) {
-          const recipeData = {
-            id: recipeDoc.id,
-            ...recipeDoc.data(),
-            preparation_time: recipeDoc.data().preparation_time?.toString() || '',
-            cooking_time: recipeDoc.data().cooking_time?.toString() || '',
-            servings: recipeDoc.data().servings || 4,
-            instructions: recipeDoc.data().instructions || '',
-            hasVariants: recipeDoc.data().variants?.length > 0 || false,
-            variants: recipeDoc.data().variants || [],
-            base_ingredients: recipeDoc.data().base_ingredients || [],
-            tags: recipeDoc.data().tags || []
-          };
-  
-          setRecipe(recipeData);
-          if (recipeData.image_url) {
-            setImagePreview(recipeData.image_url);
-          }
-  
-          // Chargement des tags et ingrédients
-          const [tagsSnapshot, ingredientsSnapshot] = await Promise.all([
-            getDocs(collection(db, 'tags')),
-            getDocs(collection(db, 'ingredients'))
-          ]);
-  
-          const availableIngsData = ingredientsSnapshot.docs.map(doc => ({
+          const allIngredients = ingredientsSnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
           }));
-          setAvailableIngredients(availableIngsData);
-  
+          setAvailableIngredients(allIngredients);
+
+          const recipeData = { 
+            id: recipeDoc.id, 
+            ...recipeDoc.data(),
+            preparation_time: recipeDoc.data().preparation_time?.toString() || '',
+            cooking_time: recipeDoc.data().cooking_time?.toString() || '',
+            hasVariants: Boolean(recipeDoc.data().variants?.length),
+            base_ingredients: recipeDoc.data().base_ingredients || []
+          };
+          setRecipe(recipeData);
+          
+          if (recipeData.image_url) {
+            setImagePreview(recipeData.image_url);
+          }
+
           // Initialiser les searchTerms pour les ingrédients
-          const ingredientSearchTerms = {};
-          recipeData.base_ingredients.forEach((ingredient, index) => {
-            const ing = availableIngsData.find(i => i.id === ingredient.ingredient_id);
-            if (ing) {
-              ingredientSearchTerms[index] = ing.name;
+          const baseSearchTerms = {};
+          
+          // Pour les ingrédients de base
+          recipeData.base_ingredients?.forEach((ing, index) => {
+            const ingredient = allIngredients.find(i => i.id === ing.ingredient_id);
+            if (ingredient) {
+              baseSearchTerms[index] = ingredient.name;
             }
           });
-  
-          // Initialiser les searchTerms pour les variantes
+
+          // Pour les variantes
           recipeData.variants?.forEach((variant, variantIndex) => {
-            variant.ingredients?.forEach((ingredient, ingredientIndex) => {
-              const ing = availableIngsData.find(i => i.id === ingredient.ingredient_id);
-              if (ing) {
-                ingredientSearchTerms[`${variantIndex}-${ingredientIndex}`] = ing.name;
+            variant.ingredients?.forEach((ing, ingIndex) => {
+              const ingredient = allIngredients.find(i => i.id === ing.ingredient_id);
+              if (ingredient) {
+                baseSearchTerms[`${variantIndex}-${ingIndex}`] = ingredient.name;
               }
             });
           });
-  
-          setSearchTerms(ingredientSearchTerms);
-          setAvailableTags(tagsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })));
-  
-          // Initialiser les catégories de tags sélectionnées
-          const tagDocs = await Promise.all(
-            recipeData.tags.map(tagId => getDoc(doc(db, 'tags', tagId)))
-          );
-          const categories = new Set(
-            tagDocs.map(doc => doc.exists() ? doc.data().category : null).filter(Boolean)
-          );
-          setSelectedTagCategories(Array.from(categories));
+
+          setSearchTerms(baseSearchTerms);
         }
       } catch (error) {
-        console.error("Erreur lors du chargement de la recette:", error);
+        console.error("Erreur lors du chargement:", error);
       } finally {
         setLoading(false);
       }
     };
-  
-    fetchRecipe();
-  }, [id]);
+
+    if (user) {
+      fetchData();
+    }
+  }, [id, user]);
 
   const handleImageChange = async (e) => {
     const file = e.target.files[0];
@@ -341,38 +327,10 @@ const handleSubmit = async (e) => {
           </div>
         </div>
         {/* Tags Categories Section */}
-        <div className="bg-white rounded-lg shadow-soft p-6">
-          <h2 className="text-xl font-semibold text-sage-900 mb-6">
-            Catégories de tags
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {Object.entries(tagCategories).map(([categoryId, category]) => {
-              const hasTags = availableTags.some(tag => tag.category === categoryId);
-              if (!hasTags) return null;
-              
-              return (
-                <button
-                  key={categoryId}
-                  type="button"
-                  onClick={() => {
-                    setSelectedTagCategories(prev => 
-                      prev.includes(categoryId)
-                        ? prev.filter(id => id !== categoryId)
-                        : [...prev, categoryId]
-                    );
-                  }}
-                  className={`${
-                    selectedTagCategories.includes(categoryId)
-                      ? 'bg-earth-100 border-earth-500 text-earth-700'
-                      : 'bg-sage-50 border-sage-300 text-sage-700 hover:bg-sage-100'
-                  } p-4 rounded-lg border-2 text-center transition-all duration-200`}
-                >
-                  {category.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <TagSelectionSection 
+          selectedTags={recipe.tags} 
+          setSelectedTags={(tags) => setRecipe(prev => ({ ...prev, tags }))}
+        />
 
         {/* Tags Selection Section */}
         {selectedTagCategories.length > 0 && (

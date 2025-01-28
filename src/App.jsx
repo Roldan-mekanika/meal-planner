@@ -19,6 +19,7 @@ import EditRecipe from './pages/Recipes/EditRecipe';
 // Routes Config
 import Config from './pages/Config/Config';
 import Tags from './pages/Config/Tags';
+import TagCategoryManager from './components/config/TagCategoryManager';
 import Ingredients from './pages/Config/Ingredients';
 
 // Routes Planning
@@ -65,10 +66,10 @@ function App() {
              <Route path="recipes/:id" element={<RecipeDetail />} />
 
              <Route path="config" element={<Config />}>
-               <Route index element={<Navigate to="/config/tags" replace />} />
+               <Route index element={<Navigate to="/config/tag-categories" replace />} />
+               <Route path="tag-categories" element={<TagCategoryManager />} />
                <Route path="tags" element={<Tags />} />
                <Route path="ingredients" element={<Ingredients />} />
-               <Route path="settings" element={<></>} />
              </Route>
 
              <Route path="planning" element={<Planning />}>

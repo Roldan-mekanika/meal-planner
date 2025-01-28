@@ -70,9 +70,9 @@ const RecipeIngredientForm = ({
 
  const handleCreateIngredient = async () => {
    try {
-     const exists = availableIngredients.some(
-       ing => ing.name?.toLowerCase() === newIngredientData.name.toLowerCase()
-     );
+    const exists = availableIngredients.some(
+      ing => ing.name.toLowerCase() === newIngredientData.name.toLowerCase()
+    );
 
      if (exists) {
        alert("Cet ingrédient existe déjà");

@@ -123,23 +123,16 @@ const Recipes = () => {
 
        {/* Filtres */}
        <RecipeFilters
-         searchTerm={searchTerm}
-         setSearchTerm={setSearchTerm}
-         seasonalSearchEnabled={seasonalSearchEnabled}
-         setSeasonalSearchEnabled={setSeasonalSearchEnabled}
-         selectedMonth={selectedMonth}
-         setSelectedMonth={(value) => {
-           setSelectedMonth(value);
-           if (value && !seasonalSearchEnabled) {
-             setSeasonalSearchEnabled(true);
-           }
-         }}
-         selectedTags={selectedTags}
-         setSelectedTags={setSelectedTags}
-         activeTagCategory={activeTagCategory}
-         setActiveTagCategory={setActiveTagCategory}
-         groupedTags={groupedTags}
-       />
+  searchTerm={searchTerm}
+  setSearchTerm={setSearchTerm}
+  selectedTags={selectedTags}
+  setSelectedTags={setSelectedTags}
+  activeTagCategory={activeTagCategory}
+  setActiveTagCategory={setActiveTagCategory}
+  groupedTags={groupedTags}
+  seasonalSearchEnabled={seasonalSearchEnabled}      // Ajout
+  setSeasonalSearchEnabled={setSeasonalSearchEnabled} // Ajout
+/>
 
        {/* Liste des recettes */}
        {filteredRecipes.length === 0 ? (

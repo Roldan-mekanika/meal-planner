@@ -9,7 +9,7 @@ import {
 import { auth } from '../config/firebase';
 import { collection, doc, setDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { defaultTags } from '../config/defaultData';
+import { CORE_TAG_CATEGORIES } from '../config/defaultData';
 
 const AuthContext = createContext();
 
@@ -41,7 +41,7 @@ export const AuthProvider = ({ children }) => {
      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
      console.log('User created:', userCredential);
 
-     // Créer le document utilisateur
+     // Create user document
      const userDoc = doc(db, 'users', userCredential.user.uid);
      await setDoc(userDoc, {
        email,
@@ -50,19 +50,40 @@ export const AuthProvider = ({ children }) => {
        lastLoginAt: serverTimestamp(),
        preferences: {
          weightSystem: 'metric',
-         volumeSystem: 'metric',
-         enabledTagCategories: ['regime', 'typeRepas', 'pays']
+         volumeSystem: 'metric'
        }
      });
 
-     // Créer les tags par défaut
-     const tagsCollection = collection(db, `users/${userCredential.user.uid}/tags`);
-     for (const tag of defaultTags) {
-       await addDoc(tagsCollection, {
-         ...tag,
-         createdAt: serverTimestamp()
-       });
-     }
+     // Create core tag categories
+     const tagCategoriesRef = collection(db, `users/${userCredential.user.uid}/tagCategories`);
+     await Promise.all(
+       Object.values(CORE_TAG_CATEGORIES).map(category => 
+         addDoc(tagCategoriesRef, {
+           ...category,
+           createdAt: serverTimestamp()
+         })
+       )
+     );
+
+     // Create default tags for each core category
+     const tagsRef = collection(db, `users/${userCredential.user.uid}/tags`);
+     const defaultTags = {
+       pays: ['Français', 'Italien', 'Japonais', 'Indien'],
+       regime: ['Végétarien', 'Végétalien', 'Sans gluten', 'Sans lactose'],
+       saison: ['Printemps', 'Été', 'Automne', 'Hiver']
+     };
+
+     await Promise.all(
+       Object.entries(defaultTags).flatMap(([category, tags]) =>
+         tags.map(name => 
+           addDoc(tagsRef, {
+             name,
+             category,
+             createdAt: serverTimestamp()
+           })
+         )
+       )
+     );
 
      console.log('Signup successful');
      return userCredential.user;
@@ -78,7 +99,7 @@ export const AuthProvider = ({ children }) => {
      const userCredential = await signInWithEmailAndPassword(auth, email, password);
      console.log('Login successful:', userCredential);
 
-     // Mettre à jour la dernière connexion
+     // Update last login
      const userDoc = doc(db, 'users', userCredential.user.uid);
      await setDoc(userDoc, {
        lastLoginAt: serverTimestamp()
