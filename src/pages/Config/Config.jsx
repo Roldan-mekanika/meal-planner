@@ -1,36 +1,22 @@
 // src/pages/Config/Config.jsx
 import React from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import FilterSettings from '../../components/config/FilterSettings';
-import Settings from '../../components/config/Settings';
 import TabNavigation from '../../components/common/TabNavigation';
+import TagCategoryManager from '../../components/config/TagCategoryManager';
 
 const Config = () => {
   const location = useLocation();
   
   const tabs = [
+    { path: '/config/tag-categories', label: 'Catégories de tags' },
     { path: '/config/tags', label: 'Tags' },
-    { path: '/config/ingredients', label: 'Ingrédients' },
-    { path: '/config/settings', label: 'Paramètres' }
+    { path: '/config/ingredients', label: 'Ingrédients' }
   ];
-
-  // Composant pour les paramètres
-  const SettingsTab = () => (
-    <div className="space-y-8">
-      <Settings />
-      <FilterSettings />
-    </div>
-  );
 
   return (
     <div className="max-w-7xl mx-auto py-6">
       <TabNavigation tabs={tabs} />
-
-      {location.pathname === '/config/settings' ? (
-        <SettingsTab />
-      ) : (
-        <Outlet />
-      )}
+      <Outlet />
     </div>
   );
 };

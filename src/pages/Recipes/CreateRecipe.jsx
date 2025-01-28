@@ -9,6 +9,7 @@ import RecipeEditor from '../../components/common/RecipeEditor';
 import RecipeIngredientForm from '../../components/recipes/RecipeIngredientForm';
 import { processImage } from '../../utils/imageProcessor';
 import { useAuth } from '../../contexts/AuthContext';
+import TagSelectionSection from '../../components/recipes/TagSelectionSection';
 
 const CreateRecipe = () => {
   const { user } = useAuth();
@@ -284,38 +285,10 @@ const CreateRecipe = () => {
         </div>
 
         {/* Tags Categories Section */}
-        <div className="bg-white rounded-lg shadow-soft p-6">
-          <h2 className="text-xl font-semibold text-sage-900 mb-6">
-            Catégories de tags
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {Object.entries(tagCategories).map(([categoryId, category]) => {
-              const hasTags = availableTags.some(tag => tag.category === categoryId);
-              if (!hasTags) return null;
-              
-              return (
-                <button
-                  key={categoryId}
-                  type="button"
-                  onClick={() => {
-                    setSelectedTagCategories(prev => 
-                      prev.includes(categoryId)
-                        ? prev.filter(id => id !== categoryId)
-                        : [...prev, categoryId]
-                    );
-                  }}
-                  className={`${
-                    selectedTagCategories.includes(categoryId)
-                      ? 'bg-earth-100 border-earth-500 text-earth-700'
-                      : 'bg-sage-50 border-sage-300 text-sage-700 hover:bg-sage-100'
-                  } p-4 rounded-lg border-2 text-center transition-all duration-200`}
-                >
-                  {category.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <TagSelectionSection 
+          selectedTags={recipe.tags} 
+          setSelectedTags={(tags) => setRecipe(prev => ({ ...prev, tags }))}
+        />
 
         {/* Tags Selection Section */}
         {selectedTagCategories.length > 0 && (

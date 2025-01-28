@@ -1,21 +1,37 @@
-export const defaultTags = {
-    regime: [
-      { name: 'Végétarien', category: 'regime' },
-      { name: 'Végétalien', category: 'regime' },
-      { name: 'Sans gluten', category: 'regime' },
-      { name: 'Sans lactose', category: 'regime' }
-    ],
-    typeRepas: [
-      { name: 'Entrée', category: 'typeRepas' },
-      { name: 'Plat principal', category: 'typeRepas' },
-      { name: 'Dessert', category: 'typeRepas' },
-      { name: 'Apéritif', category: 'typeRepas' },
-      { name: 'Petit-déjeuner', category: 'typeRepas' }
-    ],
-    pays: [
-      { name: 'Français', category: 'pays' },
-      { name: 'Italien', category: 'pays' },
-      { name: 'Japonais', category: 'pays' },
-      { name: 'Indien', category: 'pays' }
-    ]
-  };
+export const CORE_TAG_CATEGORIES = {
+  pays: {
+    id: 'pays',
+    label: 'Pays',
+    isCore: true,
+    color: 'bg-orange-100 text-orange-800',
+    darkColor: 'bg-orange-700 text-white',
+    order: 1
+  },
+  saison: {
+    id: 'saison',
+    label: 'Saison',
+    isCore: true,
+    color: 'bg-green-100 text-green-800',
+    darkColor: 'bg-green-700 text-white',
+    order: 2
+  },
+  regime: {
+    id: 'regime',
+    label: 'Régime alimentaire',
+    isCore: true,
+    color: 'bg-blue-100 text-blue-800',
+    darkColor: 'bg-blue-700 text-white',
+    order: 3
+  }
+};
+
+export const CUSTOM_TAG_CATEGORIES_TEMPLATE = {
+  technique: {
+    id: 'technique',
+    label: 'Technique',
+    isCore: false,
+    color: 'bg-purple-100 text-purple-800',
+    darkColor: 'bg-purple-700 text-white',
+    order: 4
+  }
+};

@@ -1,6 +1,10 @@
 // src/components/recipes/RecipeFilters/index.jsx
-import React, { useMemo } from 'react';
-import { months, tagCategories } from '../../../config/categories';
+import React, { useState, useEffect } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../../config/firebase';
+import { useAuth } from '../../../contexts/AuthContext';
+import { CORE_TAG_CATEGORIES } from '../../../config/defaultData';
+import { months } from '../../../config/categories';
 
 const RecipeFilters = ({
   searchTerm,
@@ -13,21 +17,62 @@ const RecipeFilters = ({
   setActiveTagCategory,
   groupedTags
 }) => {
-  const [showAdvancedFilters, setShowAdvancedFilters] = React.useState(false);
-  const [enabledFilters] = React.useState(
-    JSON.parse(localStorage.getItem('enabledFilters') || '[]')
-  );
+  const { user } = useAuth();
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [enabledCategories, setEnabledCategories] = useState([]);
+  const [allCategories, setAllCategories] = useState({});
 
-  // Préparer les catégories visibles
-  const visibleCategories = useMemo(() => {
-    return Object.entries(tagCategories)
-      .filter(([id]) => enabledFilters.includes(id))
-      .sort(([, a], [, b]) => a.order - b.order)
-      .map(([id, category]) => ({
-        id,
-        ...category
-      }));
-  }, [enabledFilters]);
+  useEffect(() => {
+    loadCategories();
+  }, [user.uid]);
+
+  const loadCategories = async () => {
+    try {
+      const [enabledCats, customCatsSnapshot] = await Promise.all([
+        JSON.parse(localStorage.getItem('enabledTagCategories') || '[]'),
+        getDocs(collection(db, `users/${user.uid}/tagCategories`))
+      ]);
+
+      setEnabledCategories(enabledCats);
+
+      const customCategories = {};
+      customCatsSnapshot.docs.forEach(doc => {
+        customCategories[doc.id] = { id: doc.id, ...doc.data() };
+      });
+
+      setAllCategories({
+        ...CORE_TAG_CATEGORIES,
+        ...customCategories
+      });
+    } catch (error) {
+      console.error("Erreur lors du chargement des catégories:", error);
+    }
+  };
+
+  const updateFilters = (selectedCategoryId, selectedTagId) => {
+    if (selectedTagId) {
+      setSelectedTags(prev => {
+        const newTags = prev.includes(selectedTagId)
+          ? prev.filter(id => id !== selectedTagId)
+          : [...prev, selectedTagId];
+          
+        if (newTags.length === 0) {
+          setActiveTagCategory(null);
+        }
+              
+        return newTags;
+      });
+    } else if (selectedCategoryId) {
+      setActiveTagCategory(prev => 
+        prev === selectedCategoryId ? null : selectedCategoryId
+      );
+    }
+  };
+
+  // Filtrer uniquement les catégories activées et les trier par ordre
+  const visibleCategories = Object.values(allCategories)
+    .filter(category => enabledCategories.includes(category.id))
+    .sort((a, b) => a.order - b.order);
 
   return (
     <div className="bg-white rounded-lg shadow-soft p-6 mb-8 space-y-6">
@@ -86,9 +131,7 @@ const RecipeFilters = ({
                 {visibleCategories.map(category => (
                   <button
                     key={category.id}
-                    onClick={() => setActiveTagCategory(
-                      activeTagCategory === category.id ? null : category.id
-                    )}
+                    onClick={() => updateFilters(category.id)}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200
                       ${activeTagCategory === category.id
                         ? category.darkColor
@@ -101,116 +144,87 @@ const RecipeFilters = ({
               </div>
 
               {/* Options de la catégorie active */}
-              {activeTagCategory && (
-                <div className="mt-2 animate-fade-in">
-                  {activeTagCategory === 'season' ? (
-                    <div className="flex flex-wrap gap-2">
-                      {months.map(month => (
-                        <button
-                          key={month.id}
-                          onClick={() => setSelectedMonth(
-                            selectedMonth === month.id.toString() ? '' : month.id.toString()
-                          )}
-                          className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200
-                            ${selectedMonth === month.id.toString()
-                              ? tagCategories.season.darkColor
-                              : tagCategories.season.color
-                            }`}
-                        >
-                          {month.name}
-                          {selectedMonth === month.id.toString() && (
-                            <span className="ml-2 text-xs">×</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {groupedTags[activeTagCategory]?.map(tag => (
-                        <button
-                          key={tag.id}
-                          onClick={() => {
-                            setSelectedTags(prev => {
-                              const newTags = prev.includes(tag.id)
-                                ? prev.filter(id => id !== tag.id)
-                                : [...prev, tag.id];
-                              
-                              // Si c'était le dernier tag de la catégorie, on désactive la catégorie
-                              const hasTagsInCategory = newTags.some(tagId => 
-                                groupedTags[activeTagCategory]?.some(t => t.id === tagId)
-                              );
-                              if (!hasTagsInCategory) {
-                                setActiveTagCategory(null);
-                              }
-                              
-                              return newTags;
-                            });
-                          }}
-                          className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200
-                            ${selectedTags.includes(tag.id)
-                              ? tagCategories[activeTagCategory]?.darkColor
-                              : tagCategories[activeTagCategory]?.color
-                            }`}
-                        >
-                          {tag.name}
-                          {selectedTags.includes(tag.id) && (
-                            <span className="ml-2 text-xs">×</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+{activeTagCategory && (
+ <div className="mt-2 animate-fade-in">
+   {activeTagCategory === 'saison' ? (
+     <div className="bg-sage-50 p-4 rounded-lg">
+       <div className="flex items-center mb-2">
+         <svg className="w-5 h-5 text-sage-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+             d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+         </svg>
+         <span className="text-sm font-medium text-sage-700">
+           Filtrage par saison
+         </span>
+       </div>
+       <p className="text-sm text-sage-600">
+         Les recettes affichées contiennent uniquement des ingrédients disponibles en{' '}
+         <span className="font-medium text-sage-700">
+           {months[new Date().getMonth()].name.toLowerCase()}
+         </span>
+       </p>
+     </div>
+   ) : (
+     groupedTags[activeTagCategory] && (
+       <div className="flex flex-wrap gap-2">
+         {groupedTags[activeTagCategory].map(tag => (
+           <button
+             key={tag.id}
+             onClick={() => {
+               setSelectedTags(prev => {
+                 const newTags = prev.includes(tag.id)
+                   ? prev.filter(id => id !== tag.id)
+                   : [...prev, tag.id];
+                 
+                 if (newTags.length === 0) {
+                   setActiveTagCategory(null);
+                 }
+                 
+                 return newTags;
+               });
+             }}
+             className={`px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200
+               ${selectedTags.includes(tag.id)
+                 ? allCategories[activeTagCategory]?.darkColor
+                 : allCategories[activeTagCategory]?.color
+               }`}
+           >
+             {tag.name}
+             {selectedTags.includes(tag.id) && (
+               <span className="ml-2 text-xs">×</span>
+             )}
+           </button>
+         ))}
+       </div>
+     )
+   )}
+ </div>
+)}
 
               {/* Filtres actifs */}
-              {(selectedTags.length > 0 || selectedMonth) && (
+              {selectedTags.length > 0 && (
                 <div className="pt-4 border-t border-sage-200">
                   <h3 className="text-sm font-medium text-sage-700 mb-2">
                     Filtres actifs
                   </h3>
                   <div className="flex flex-wrap gap-2">
-                    {selectedMonth && (
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium 
-                        ${tagCategories.season.darkColor} flex items-center`}
-                      >
-                        {months.find(m => m.id === parseInt(selectedMonth))?.name}
-                        <button
-                          onClick={() => {
-                            setSelectedMonth('');
-                            setActiveTagCategory(null);
-                          }}
-                          className="ml-2 hover:text-white/80"
-                        >
-                          <span className="text-xs">×</span>
-                        </button>
-                      </span>
-                    )}
                     {selectedTags.map(tagId => {
-                      const tagCategory = Object.entries(groupedTags).find(([_, tags]) =>
-                        tags.some(tag => tag.id === tagId)
-                      )?.[0];
-                      const tag = groupedTags[tagCategory]?.find(t => t.id === tagId);
+                      const category = Object.values(allCategories).find(cat => 
+                        groupedTags[cat.id]?.some(tag => tag.id === tagId)
+                      );
+                      const tag = groupedTags[category?.id]?.find(t => t.id === tagId);
 
-                      if (!tag || !tagCategory) return null;
+                      if (!tag || !category) return null;
 
                       return (
                         <span
                           key={tagId}
                           className={`px-3 py-1 rounded-full text-sm font-medium 
-                            ${tagCategories[tagCategory]?.darkColor} flex items-center`}
+                            ${category.darkColor} flex items-center`}
                         >
                           {tag.name}
                           <button
-                            onClick={() => {
-                              setSelectedTags(prev => {
-                                const newTags = prev.filter(id => id !== tagId);
-                                if (newTags.length === 0) {
-                                  setActiveTagCategory(null);
-                                }
-                                return newTags;
-                              });
-                            }}
+                            onClick={() => updateFilters(null, tagId)}
                             className="ml-2 hover:text-white/80"
                           >
                             <span className="text-xs">×</span>
