@@ -136,6 +136,11 @@ export const ingredientCategories = {
     label: 'Condiments',
     color: 'bg-amber-100 text-amber-800'
   },
+  huiles: {
+    id: 'huiles',
+    label: 'Huiles',
+    color: 'bg-yellow-100 text-yellow-800'
+  },
   graines: {
     id: 'graines',
     label: 'Graines',

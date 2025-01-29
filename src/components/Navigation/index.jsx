@@ -42,6 +42,7 @@ const Navigation = () => {
               className="text-2xl font-serif font-bold text-sage-900 hover:text-sage-700 
                 transition-colors duration-200"
             >
+              <span className="text-2xl">🌶️ </span>
               Umami Lab
             </Link>
           </div>

@@ -21,6 +21,7 @@ import Config from './pages/Config/Config';
 import Tags from './pages/Config/Tags';
 import TagCategoryManager from './components/config/TagCategoryManager';
 import Ingredients from './pages/Config/Ingredients';
+import UnitSettings from './components/config/UnitSettings';
 
 // Routes Planning
 import Planning from './pages/Planning/Planning';
@@ -70,6 +71,7 @@ function App() {
                <Route path="tag-categories" element={<TagCategoryManager />} />
                <Route path="tags" element={<Tags />} />
                <Route path="ingredients" element={<Ingredients />} />
+               <Route path="units" element={<UnitSettings />} />
              </Route>
 
              <Route path="planning" element={<Planning />}>
