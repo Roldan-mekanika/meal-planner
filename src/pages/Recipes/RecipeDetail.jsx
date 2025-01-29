@@ -5,37 +5,23 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { ingredientCategories } from '../../config/categories';
-import { useUnitPreferences, formatMeasurement } from '../../config/units';
-
-// Fonction utilitaire pour grouper les ingrédients par catégorie
-const groupIngredientsByCategory = (ingredients, availableIngredients) => {
-  return ingredients.reduce((groups, ingredient) => {
-    const ingredientDetails = availableIngredients.find(i => i.id === ingredient.ingredient_id);
-    if (!ingredientDetails) return groups;
-
-    const category = ingredientDetails.category;
-    if (!groups[category]) {
-      groups[category] = [];
-    }
-    groups[category].push({
-      ...ingredient,
-      name: ingredientDetails.name
-    });
-    return groups;
-  }, {});
-};
+import { useUnitPreferences, UNIT_SYSTEMS } from '../../config/units';
 
 const RecipeDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { convertToPreferredUnit } = useUnitPreferences();
   const [recipe, setRecipe] = useState(null);
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [tags, setTags] = useState([]);
   const [availableIngredients, setAvailableIngredients] = useState([]);
   const [servings, setServings] = useState(0);
   const [loading, setLoading] = useState(true);
-  const { convertToPreferredUnit } = useUnitPreferences();
+  const [localUnitSystem, setLocalUnitSystem] = useState({
+    weightSystem: localStorage.getItem('weightSystem') || UNIT_SYSTEMS.WEIGHTS.METRIC,
+    volumeSystem: localStorage.getItem('volumeSystem') || UNIT_SYSTEMS.VOLUMES.METRIC
+  });
 
   // Détermine la recette active (base ou variante)
   const activeRecipe = selectedVariant ? {
@@ -55,13 +41,13 @@ const RecipeDetail = () => {
 
           // Récupérer les tags et les ingrédients
           const [tagDocs, ingredientDocs] = await Promise.all([
-            Promise.all(recipeData.tags.map(tagId => getDoc(doc(db, `users/${user.uid}/tags`, tagId)))),
+            Promise.all(recipeData.tags.map(tagId => 
+              getDoc(doc(db, `users/${user.uid}/tags`, tagId)))),
             Promise.all([
               ...new Set([
                 ...(recipeData.base_ingredients || []).map(ing => ing.ingredient_id),
                 ...(recipeData.variants || []).flatMap(variant => 
-                  (variant.ingredients || []).map(ing => ing.ingredient_id)
-                )
+                  (variant.ingredients || []).map(ing => ing.ingredient_id))
               ])
             ].map(ingId => getDoc(doc(db, `users/${user.uid}/ingredients`, ingId))))
           ]);
@@ -69,8 +55,7 @@ const RecipeDetail = () => {
           setTags(tagDocs.map(doc => ({ id: doc.id, ...doc.data() })));
           setAvailableIngredients(ingredientDocs
             .filter(doc => doc.exists())
-            .map(doc => ({ id: doc.id, ...doc.data() }))
-          );
+            .map(doc => ({ id: doc.id, ...doc.data() })));
         }
       } catch (error) {
         console.error("Erreur:", error);
@@ -84,15 +69,7 @@ const RecipeDetail = () => {
 
   const handleVariantChange = async (e) => {
     const variantIndex = parseInt(e.target.value);
-    if (isNaN(variantIndex)) {
-      setSelectedVariant(null);
-      return;
-    }
-
-    const variant = recipe.variants[variantIndex];
-    if (variant) {
-      setSelectedVariant(variant);
-    }
+    setSelectedVariant(isNaN(variantIndex) ? null : recipe.variants[variantIndex]);
   };
 
   const calculateAdjustedQuantity = (quantity) => {
@@ -100,13 +77,21 @@ const RecipeDetail = () => {
     return ((quantity * servings) / recipe.servings).toFixed(1);
   };
 
-  const formatQuantity = (quantity, unit) => {
-    if (!quantity || !unit) return "";
-    const converted = convertToPreferredUnit(parseFloat(quantity), unit);
-    return `${converted.value} ${converted.unit}`;
+  const formatIngredientMeasure = (ingredient) => {
+    if (!ingredient.quantity || !ingredient.unit) return "";
+    
+    const adjustedQuantity = calculateAdjustedQuantity(ingredient.quantity);
+    const { formatted } = convertToPreferredUnit(
+      parseFloat(adjustedQuantity),
+      ingredient.unit,
+      localUnitSystem.weightSystem,
+      localUnitSystem.volumeSystem
+    );
+    
+    return formatted;
   };
 
-  const groupIngredientsByCategory = (ingredients, availableIngredients) => {
+  const groupIngredientsByCategory = (ingredients) => {
     return ingredients.reduce((groups, ingredient) => {
       const ingredientDetails = availableIngredients.find(i => i.id === ingredient.ingredient_id);
       if (!ingredientDetails) return groups;
@@ -116,20 +101,29 @@ const RecipeDetail = () => {
         groups[category] = [];
       }
 
-      // Calculer la quantité ajustée selon le nombre de portions
-      const adjustedQuantity = calculateAdjustedQuantity(ingredient.quantity);
-      
-      // Convertir et formater la mesure
-      const { formatted } = convertToPreferredUnit(adjustedQuantity, ingredient.unit);
-
       groups[category].push({
         ...ingredient,
         name: ingredientDetails.name,
-        displayMeasure: formatted
+        displayMeasure: formatIngredientMeasure(ingredient)
       });
       
       return groups;
     }, {});
+  };
+
+  const toggleUnitSystem = (type) => {
+    const newSystem = type === 'weight' 
+      ? localUnitSystem.weightSystem === UNIT_SYSTEMS.WEIGHTS.METRIC 
+        ? UNIT_SYSTEMS.WEIGHTS.IMPERIAL 
+        : UNIT_SYSTEMS.WEIGHTS.METRIC
+      : localUnitSystem.volumeSystem === UNIT_SYSTEMS.VOLUMES.METRIC
+        ? UNIT_SYSTEMS.VOLUMES.IMPERIAL
+        : UNIT_SYSTEMS.VOLUMES.METRIC;
+
+    setLocalUnitSystem(prev => ({
+      ...prev,
+      [type === 'weight' ? 'weightSystem' : 'volumeSystem']: newSystem
+    }));
   };
 
   if (loading) {
@@ -164,8 +158,7 @@ const RecipeDetail = () => {
           className="inline-flex items-center px-4 py-2 bg-earth-600 text-white rounded-lg
             hover:bg-earth-700 transition-colors duration-200 shadow-soft group"
         >
-          <svg className="h-5 w-5 mr-2 transition-transform group-hover:rotate-12" 
-            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
               d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
           </svg>
@@ -246,38 +239,64 @@ const RecipeDetail = () => {
             </div>
           </div>
 
-          {/* Nombre de portions */}
+          {/* Nombre de portions et sélecteur d'unités */}
           <div className="mb-8">
-            <label className="block text-sm font-medium text-sage-700 mb-2">
-              Nombre de portions
-            </label>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setServings(Math.max(1, servings - 1))}
-                className="p-2 rounded-lg bg-sage-100 text-sage-700 hover:bg-sage-200 
-                  transition-colors duration-200"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                </svg>
-              </button>
-              <input
-                type="number"
-                min="1"
-                value={servings}
-                onChange={(e) => setServings(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-20 text-center rounded-lg border-sage-300 shadow-soft 
-                  focus:border-earth-500 focus:ring-earth-500"
-              />
-              <button
-                onClick={() => setServings(servings + 1)}
-                className="p-2 rounded-lg bg-sage-100 text-sage-700 hover:bg-sage-200 
-                  transition-colors duration-200"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
+            <div className="flex flex-wrap gap-6 items-end">
+              {/* Portions */}
+              <div>
+                <label className="block text-sm font-medium text-sage-700 mb-2">
+                  Nombre de portions
+                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setServings(Math.max(1, servings - 1))}
+                    className="p-2 rounded-lg bg-sage-100 text-sage-700 hover:bg-sage-200 
+                      transition-colors duration-200"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                    </svg>
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    value={servings}
+                    onChange={(e) => setServings(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-20 text-center rounded-lg border-sage-300 shadow-soft 
+                      focus:border-earth-500 focus:ring-earth-500"
+                  />
+                  <button
+                    onClick={() => setServings(servings + 1)}
+                    className="p-2 rounded-lg bg-sage-100 text-sage-700 hover:bg-sage-200 
+                      transition-colors duration-200"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Système d'unités */}
+              <div className="flex gap-4">
+                {/* Poids */}
+                <button
+                  onClick={() => toggleUnitSystem('weight')}
+                  className="px-3 py-2 text-sm font-medium rounded-lg bg-sage-100 text-sage-700 
+                    hover:bg-sage-200 transition-colors duration-200"
+                >
+                  {localUnitSystem.weightSystem === UNIT_SYSTEMS.WEIGHTS.METRIC ? 'g/kg' : 'oz/lb'}
+                </button>
+
+                {/* Volume */}
+                <button
+                  onClick={() => toggleUnitSystem('volume')}
+                  className="px-3 py-2 text-sm font-medium rounded-lg bg-sage-100 text-sage-700 
+                    hover:bg-sage-200 transition-colors duration-200"
+                >
+                  {localUnitSystem.volumeSystem === UNIT_SYSTEMS.VOLUMES.METRIC ? 'ml/l' : 'cups/tbsp'}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -285,35 +304,34 @@ const RecipeDetail = () => {
           <div className="mb-8">
             <h2 className="text-xl font-bold text-sage-900 mb-4">Ingrédients</h2>
             <div className="bg-sage-50 rounded-lg p-6">
-            {Object.entries(ingredientCategories).map(([categoryId, category]) => {
-            const categoryIngredients = groupIngredientsByCategory(
-              activeRecipe.base_ingredients || [],
-              availableIngredients
-            )[categoryId];
+              {Object.entries(ingredientCategories).map(([categoryId, category]) => {
+                const categoryIngredients = groupIngredientsByCategory(
+                  activeRecipe.base_ingredients || []
+                )[categoryId];
 
-            if (!categoryIngredients?.length) return null;
+                if (!categoryIngredients?.length) return null;
 
-            return (
-              <div key={categoryId} className="mb-6 last:mb-0">
-                <h3 className="text-lg font-medium text-sage-900 mb-3 border-l-4 pl-3"
-                  style={{ borderColor: category.color.split(' ')[0].replace('bg', 'border') }}>
-                  {category.label}
-                </h3>
-                <ul className="space-y-2">
-                  {categoryIngredients.map((ingredient, index) => (
-                    <li key={index} className="flex justify-between items-center text-sage-700">
-                      <span>{ingredient.name}</span>
-                      <span className="font-medium">
-                        {ingredient.displayMeasure}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+                return (
+                  <div key={categoryId} className="mb-6 last:mb-0">
+                    <h3 className="text-lg font-medium text-sage-900 mb-3 border-l-4 pl-3"
+                      style={{ borderColor: category.color.split(' ')[0].replace('bg', 'border') }}>
+                      {category.label}
+                    </h3>
+                    <ul className="space-y-2">
+                      {categoryIngredients.map((ingredient, index) => (
+                        <li key={index} className="flex justify-between items-center text-sage-700">
+                          <span>{ingredient.name}</span>
+                          <span className="font-medium">
+                            {ingredient.displayMeasure}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
           {/* Instructions */}
           <div>
