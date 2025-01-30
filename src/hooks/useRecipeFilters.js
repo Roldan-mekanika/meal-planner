@@ -28,7 +28,6 @@ export const useRecipeFilters = (
   ingredients, 
   searchTerm, 
   selectedTags,
-  selectedMonth,
   seasonalSearchEnabled
 ) => {
   // Cleanup obsolete tags
@@ -98,36 +97,28 @@ export const useRecipeFilters = (
     
     const currentMonth = new Date().getMonth() + 1; // Get current month (1-12)
   
-    // Get all ingredients from base recipe
-    const getVegetables = (ingredientsList) => {
+    // Get all ingredients for checking seasonal availability
+    const getAllIngredients = (ingredientsList) => {
       if (!ingredientsList) return [];
       
       return ingredientsList
-        .map(ing => {
-          const ingredient = ingredients.find(i => i.id === ing.ingredient_id);
-          if (ingredient && ingredient.category === 'legumes') {
-            return ingredient;
-          }
-          return null;
-        })
-        .filter(ing => ing !== null);
+        .map(ing => ingredients.find(i => i.id === ing.ingredient_id))
+        .filter(ing => ing !== null && ing.category === 'legumes');
     };
   
-    // Get vegetables from base recipe and all variants
+    // Check base recipe and all variants
     const allVegetables = [
-      ...getVegetables(recipe.base_ingredients),
-      ...(recipe.variants || []).flatMap(variant => getVegetables(variant.ingredients))
+      ...getAllIngredients(recipe.base_ingredients),
+      ...(recipe.variants || []).flatMap(variant => getAllIngredients(variant.ingredients))
     ];
   
-    // If no vegetables in recipe, return true
+    // If no vegetables in recipe, it's always available
     if (allVegetables.length === 0) return true;
   
-    // Check if every vegetable is in season
+    // Check if any vegetable is out of season
     return allVegetables.every(vegetable => {
-      // Check if vegetable has seasons defined
-      if (!vegetable.seasons || vegetable.seasons.length === 0) {
-        return true; // If no seasons defined, consider always available
-      }
+      // If no seasons defined, consider always available
+      if (!vegetable.seasons || vegetable.seasons.length === 0) return true;
       
       // Check if current month is in vegetable's seasons
       return vegetable.seasons.includes(currentMonth);
