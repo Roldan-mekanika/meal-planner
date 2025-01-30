@@ -23,13 +23,6 @@ const RecipeDetail = () => {
     volumeSystem: localStorage.getItem('volumeSystem') || UNIT_SYSTEMS.VOLUMES.METRIC
   });
 
-  // Détermine la recette active (base ou variante)
-  const activeRecipe = selectedVariant ? {
-    ...recipe,
-    ...selectedVariant,
-    ingredients: selectedVariant.ingredients
-  } : recipe;
-
   useEffect(() => {
     const fetchRecipe = async () => {
       try {
@@ -39,17 +32,19 @@ const RecipeDetail = () => {
           setRecipe(recipeData);
           setServings(recipeData.servings);
 
-          // Récupérer les tags et les ingrédients
+          // Collecter tous les IDs d'ingrédients uniques (base + variants)
+          const allIngredientIds = new Set([
+            ...(recipeData.base_ingredients || []).map(ing => ing.ingredient_id),
+            ...(recipeData.variants || []).flatMap(variant => 
+              (variant.ingredients || []).map(ing => ing.ingredient_id)
+            )
+          ]);
+
           const [tagDocs, ingredientDocs] = await Promise.all([
-            Promise.all(recipeData.tags.map(tagId => 
+            Promise.all((recipeData.tags || []).map(tagId => 
               getDoc(doc(db, `users/${user.uid}/tags`, tagId)))),
-            Promise.all([
-              ...new Set([
-                ...(recipeData.base_ingredients || []).map(ing => ing.ingredient_id),
-                ...(recipeData.variants || []).flatMap(variant => 
-                  (variant.ingredients || []).map(ing => ing.ingredient_id))
-              ])
-            ].map(ingId => getDoc(doc(db, `users/${user.uid}/ingredients`, ingId))))
+            Promise.all(Array.from(allIngredientIds).map(ingId => 
+              getDoc(doc(db, `users/${user.uid}/ingredients`, ingId))))
           ]);
 
           setTags(tagDocs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -67,9 +62,18 @@ const RecipeDetail = () => {
     fetchRecipe();
   }, [id, user.uid]);
 
-  const handleVariantChange = async (e) => {
-    const variantIndex = parseInt(e.target.value);
-    setSelectedVariant(isNaN(variantIndex) ? null : recipe.variants[variantIndex]);
+  const handleVariantChange = (e) => {
+    const value = e.target.value;
+    
+    if (value === '') {
+      // Si on sélectionne "Recette de base"
+      setSelectedVariant(null);
+    } else {
+      // Si on sélectionne une variante
+      const index = parseInt(value);
+      const variant = recipe.variants[index];
+      setSelectedVariant(variant);
+    }
   };
 
   const calculateAdjustedQuantity = (quantity) => {
@@ -92,6 +96,8 @@ const RecipeDetail = () => {
   };
 
   const groupIngredientsByCategory = (ingredients) => {
+    if (!ingredients) return {};
+    
     return ingredients.reduce((groups, ingredient) => {
       const ingredientDetails = availableIngredients.find(i => i.id === ingredient.ingredient_id);
       if (!ingredientDetails) return groups;
@@ -135,6 +141,18 @@ const RecipeDetail = () => {
   }
 
   if (!recipe) return null;
+
+  // Détermine la recette active (base ou variante)
+  const activeRecipe = selectedVariant ? {
+    ...recipe,
+    ...selectedVariant,
+    ingredients: selectedVariant.ingredients || []
+  } : recipe;
+
+  // Détermine les ingrédients actifs
+  const activeIngredients = selectedVariant
+    ? selectedVariant.ingredients || []
+    : recipe.base_ingredients || [];
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8 animate-fade-in">
@@ -186,23 +204,25 @@ const RecipeDetail = () => {
 
           {/* Sélecteur de variante */}
           {recipe.variants && recipe.variants.length > 0 && (
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-sage-700 mb-2">
-                Variante de la recette
-              </label>
-              <select
-                value={selectedVariant ? recipe.variants.indexOf(selectedVariant) : ''}
-                onChange={handleVariantChange}
-                className="w-full md:w-64 rounded-lg border-sage-300 shadow-soft 
-                  focus:border-earth-500 focus:ring-earth-500 transition-colors duration-200"
-              >
-                <option value="">Recette de base</option>
-                {recipe.variants.map((variant, index) => (
-                  <option key={index} value={index}>{variant.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
+  <div className="mb-6">
+    <label className="block text-sm font-medium text-sage-700 mb-2">
+      Variante de la recette
+    </label>
+    <select
+      value={selectedVariant ? recipe.variants.findIndex(v => v.name === selectedVariant.name) : ''}
+      onChange={handleVariantChange}
+      className="w-full md:w-64 rounded-lg border-sage-300 shadow-soft 
+        focus:border-earth-500 focus:ring-earth-500 transition-colors duration-200"
+    >
+      <option value="">Recette de base</option>
+      {recipe.variants.map((variant, index) => (
+        <option key={index} value={index}>
+          {variant.name}
+        </option>
+      ))}
+    </select>
+  </div>
+)}
 
           {/* Tags */}
           <div className="flex flex-wrap gap-2 mb-6">
@@ -279,7 +299,6 @@ const RecipeDetail = () => {
 
               {/* Système d'unités */}
               <div className="flex gap-4">
-                {/* Poids */}
                 <button
                   onClick={() => toggleUnitSystem('weight')}
                   className="px-3 py-2 text-sm font-medium rounded-lg bg-sage-100 text-sage-700 
@@ -287,8 +306,6 @@ const RecipeDetail = () => {
                 >
                   {localUnitSystem.weightSystem === UNIT_SYSTEMS.WEIGHTS.METRIC ? 'g/kg' : 'oz/lb'}
                 </button>
-
-                {/* Volume */}
                 <button
                   onClick={() => toggleUnitSystem('volume')}
                   className="px-3 py-2 text-sm font-medium rounded-lg bg-sage-100 text-sage-700 
@@ -305,9 +322,7 @@ const RecipeDetail = () => {
             <h2 className="text-xl font-bold text-sage-900 mb-4">Ingrédients</h2>
             <div className="bg-sage-50 rounded-lg p-6">
               {Object.entries(ingredientCategories).map(([categoryId, category]) => {
-                const categoryIngredients = groupIngredientsByCategory(
-                  activeRecipe.base_ingredients || []
-                )[categoryId];
+                const categoryIngredients = groupIngredientsByCategory(activeIngredients)[categoryId];
 
                 if (!categoryIngredients?.length) return null;
 
